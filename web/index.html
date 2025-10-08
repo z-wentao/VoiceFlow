@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceFlow</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .test-btn {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎙️ VoiceFlow</h1>
+    <p>语音转文字平台</p>
+
+    <button class="test-btn" onclick="testAPI()">测试 API</button>
+
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const result = document.getElementById('result');
+            result.textContent = '请求中...';
+
+            try {
+                const response = await fetch('/ping');
+                const data = await response.json();
+                result.textContent = 'API 响应: ' + JSON.stringify(data);
+            } catch (error) {
+                result.textContent = '错误: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
+
