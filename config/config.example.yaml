@@ -1,0 +1,27 @@
+# VoiceFlow 配置文件示例
+# 使用方法：复制此文件为 config.yaml，并填入你的配置
+
+# OpenAI API 配置
+openai:
+  api_key: "your-openai-api-key-here"  # 请替换为你的 API Key
+
+# 转换引擎配置
+transcriber:
+  worker_count: 3           # 并发处理的 Goroutine 数量（推荐 3-5）
+  segment_duration: 600     # 每个片段的时长（秒），默认 10 分钟
+  max_retries: 3            # API 调用失败时的重试次数
+
+# 任务队列配置
+queue:
+  type: "memory"            # 队列类型: memory 或 rabbitmq
+  buffer_size: 100          # 内存队列缓冲区大小
+
+  # RabbitMQ 配置（当 type 为 rabbitmq 时使用）
+  rabbitmq:
+    url: "amqp://guest:guest@localhost:5672/"
+    queue_name: "voiceflow_jobs"
+
+# 服务器配置
+server:
+  port: 8080                # 服务器端口
+  max_upload_size: 104857600  # 最大上传文件大小（字节），默认 100MB

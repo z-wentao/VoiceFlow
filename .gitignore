@@ -1,4 +1,52 @@
+# Binaries
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go build artifacts
+*.test
+*.out
+/bin/
+/dist/
+
+# Database files
 *.db
+*.sqlite
+*.sqlite3
+
+# Environment files
 .env
+.env.*
+
+# macOS
 .DS_Store
+
+# Uploads and temporary files
+uploads/
+uploads/*
+!uploads/.gitkeep
+
+# Segments (temporary audio files)
+**/segments/
+
+# Configuration (API keys)
+config/config.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Test coverage
+*.cover
+coverage.html
+
+# Go modules cache
+go.sum
