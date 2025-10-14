@@ -14,21 +14,21 @@ import (
 // TranscriptionEngine 转换引擎
 // 面试亮点：Goroutine Pool + Channel 并发处理
 type TranscriptionEngine struct {
-	whisperClient *WhisperClient
-	splitter      *AudioSplitter
-	workerCount   int // Goroutine Pool 大小
+	whisperClient       *WhisperClient
+	splitter            *AudioSplitter
+	segmentConcurrency  int // 音频分片并发处理数
 }
 
 // NewTranscriptionEngine 创建转换引擎
-func NewTranscriptionEngine(apiKey string, workerCount int, segmentDuration int) *TranscriptionEngine {
-	if workerCount <= 0 {
-		workerCount = 3 // 默认 3 个并发 worker
+func NewTranscriptionEngine(apiKey string, segmentConcurrency int, segmentDuration int) *TranscriptionEngine {
+	if segmentConcurrency <= 0 {
+		segmentConcurrency = 3 // 默认 3 个并发分片处理
 	}
 
 	return &TranscriptionEngine{
-		whisperClient: NewWhisperClient(apiKey),
-		splitter:      NewAudioSplitter(segmentDuration),
-		workerCount:   workerCount,
+		whisperClient:      NewWhisperClient(apiKey),
+		splitter:           NewAudioSplitter(segmentDuration),
+		segmentConcurrency: segmentConcurrency,
 	}
 }
 
@@ -68,11 +68,11 @@ func (te *TranscriptionEngine) Transcribe(
 	resultChan := make(chan ProcessResult, totalSegments)
 
 	// 3. 启动 Goroutine Pool（面试亮点：并发控制）
-	log.Printf("🚀 启动 %d 个并发 Worker 进行处理...", te.workerCount)
+	log.Printf("🚀 启动 %d 个并发分片处理器进行处理...", te.segmentConcurrency)
 	var wg sync.WaitGroup
-	for i := 0; i < te.workerCount; i++ {
+	for i := 0; i < te.segmentConcurrency; i++ {
 		wg.Add(1)
-		go te.worker(ctx, i, taskChan, resultChan, language, &wg)
+		go te.segmentProcessor(ctx, i, taskChan, resultChan, language, &wg)
 	}
 
 	// 4. 发送任务到队列
@@ -124,11 +124,11 @@ func (te *TranscriptionEngine) Transcribe(
 	return finalText, nil
 }
 
-// worker Goroutine Pool 中的工作单元
+// segmentProcessor 分片处理器 - Goroutine Pool 中的工作单元
 // 面试亮点：展示 Goroutine、Channel 和 Context 的配合使用
-func (te *TranscriptionEngine) worker(
+func (te *TranscriptionEngine) segmentProcessor(
 	ctx context.Context,
-	workerID int,
+	processorID int,
 	taskChan <-chan models.Segment,
 	resultChan chan<- ProcessResult,
 	language string,
@@ -136,7 +136,7 @@ func (te *TranscriptionEngine) worker(
 ) {
 	defer wg.Done()
 
-	log.Printf("Worker %d 启动", workerID)
+	log.Printf("分片处理器 #%d 启动", processorID)
 
 	for segment := range taskChan {
 		// 检查 Context 是否已取消
@@ -151,8 +151,8 @@ func (te *TranscriptionEngine) worker(
 		}
 
 		// 转换音频片段（带重试）
-		log.Printf("🔄 [Worker-%d] 正在处理片段 #%d (%.1fs - %.1fs)",
-			workerID, segment.Index, segment.Start, segment.End)
+		log.Printf("🔄 [分片处理器-%d] 正在处理片段 #%d (%.1fs - %.1fs)",
+			processorID, segment.Index, segment.Start, segment.End)
 		text, err := te.whisperClient.TranscribeWithRetry(ctx, segment.FilePath, language, 3)
 
 		// 发送结果
@@ -163,7 +163,7 @@ func (te *TranscriptionEngine) worker(
 		}
 	}
 
-	log.Printf("Worker %d 结束", workerID)
+	log.Printf("分片处理器 #%d 结束", processorID)
 }
 
 // mergeResults 按顺序合并所有片段的结果

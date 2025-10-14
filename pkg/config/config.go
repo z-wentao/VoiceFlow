@@ -22,10 +22,10 @@ type OpenAIConfig struct {
 
 // TranscriberConfig 转换器配置
 type TranscriberConfig struct {
-	WorkerPoolSize  int `yaml:"worker_pool_size"`  // Worker 实例数量（同时处理多少个音频文件）
-	WorkerCount     int `yaml:"worker_count"`      // 每个音频文件的并发分段数
-	SegmentDuration int `yaml:"segment_duration"`
-	MaxRetries      int `yaml:"max_retries"`
+	WorkerPoolSize     int `yaml:"worker_pool_size"`     // Worker 实例数量（同时处理多少个音频文件）
+	SegmentConcurrency int `yaml:"segment_concurrency"`  // 每个音频文件的分片并发处理数
+	SegmentDuration    int `yaml:"segment_duration"`
+	MaxRetries         int `yaml:"max_retries"`
 }
 
 // QueueConfig 队列配置
@@ -79,8 +79,8 @@ func (c *Config) Validate() error {
 		c.Transcriber.WorkerPoolSize = 2 // 默认 2 个 Worker 实例
 	}
 
-	if c.Transcriber.WorkerCount <= 0 {
-		c.Transcriber.WorkerCount = 3
+	if c.Transcriber.SegmentConcurrency <= 0 {
+		c.Transcriber.SegmentConcurrency = 3 // 默认 3 个并发分片处理
 	}
 
 	if c.Transcriber.SegmentDuration <= 0 {

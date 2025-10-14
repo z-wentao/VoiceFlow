@@ -68,7 +68,7 @@ func main() {
 	// 4. 初始化转换引擎
 	app.engine = transcriber.NewTranscriptionEngine(
 		cfg.OpenAI.APIKey,
-		cfg.Transcriber.WorkerCount,
+		cfg.Transcriber.SegmentConcurrency,
 		cfg.Transcriber.SegmentDuration,
 	)
 	log.Println("✓ 转换引擎初始化成功")
@@ -94,7 +94,7 @@ func main() {
 	log.Printf("🚀 VoiceFlow 服务器启动在 http://localhost:%d", cfg.Server.Port)
 	log.Printf("📝 配置信息:")
 	log.Printf("   - Worker 实例数: %d (同时处理 %d 个音频文件)", cfg.Transcriber.WorkerPoolSize, cfg.Transcriber.WorkerPoolSize)
-	log.Printf("   - 每个音频的并发分段数: %d", cfg.Transcriber.WorkerCount)
+	log.Printf("   - 每个音频的分片并发数: %d", cfg.Transcriber.SegmentConcurrency)
 	log.Printf("   - 音频分片时长: %d 秒", cfg.Transcriber.SegmentDuration)
 	log.Printf("   - 队列类型: %s", cfg.Queue.Type)
 

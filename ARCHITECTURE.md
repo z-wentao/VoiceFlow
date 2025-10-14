@@ -551,7 +551,7 @@ openai:
   api_key: "your-api-key"
 
 transcriber:
-  worker_count: 3           # Goroutine Pool 大小
+  segment_concurrency: 3    # 音频分片并发处理数
   segment_duration: 600     # 音频分片时长（秒）
   max_retries: 3
 

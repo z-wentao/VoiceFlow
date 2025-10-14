@@ -162,7 +162,7 @@ openai:
 
 # 转换引擎配置
 transcriber:
-  worker_count: 3           # 并发 Worker 数量（核心参数）
+  segment_concurrency: 3    # 音频分片并发处理数（核心参数）
   segment_duration: 600     # 音频分片时长（秒）
   max_retries: 3            # API 重试次数
 
