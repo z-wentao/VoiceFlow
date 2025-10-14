@@ -15,6 +15,7 @@ import (
 // Worker 任务处理器
 // 面试亮点：展示 Goroutine 的生命周期管理
 type Worker struct {
+	id     int    // Worker ID，用于日志标识
 	queue  queue.Queue
 	store  *storage.JobStore
 	engine *transcriber.TranscriptionEngine
@@ -24,6 +25,7 @@ type Worker struct {
 
 // NewWorker 创建 Worker
 func NewWorker(
+	id int,
 	q queue.Queue,
 	store *storage.JobStore,
 	engine *transcriber.TranscriptionEngine,
@@ -31,6 +33,7 @@ func NewWorker(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Worker{
+		id:     id,
 		queue:  q,
 		store:  store,
 		engine: engine,
@@ -47,19 +50,19 @@ func (w *Worker) Start() {
 
 // Stop 停止 Worker
 func (w *Worker) Stop() {
-	log.Println("正在停止 Worker...")
+	log.Printf("[Worker-%d] 正在停止...", w.id)
 	w.cancel()
 }
 
 // run Worker 主循环
 func (w *Worker) run() {
-	log.Println("Worker 已启动，等待任务...")
+	log.Printf("[Worker-%d] 已启动，等待任务...", w.id)
 
 	for {
 		// 检查是否需要停止
 		select {
 		case <-w.ctx.Done():
-			log.Println("Worker 已停止")
+			log.Printf("[Worker-%d] 已停止", w.id)
 			return
 		default:
 		}
@@ -67,7 +70,7 @@ func (w *Worker) run() {
 		// 从队列获取任务（阻塞）
 		job, err := w.queue.Dequeue()
 		if err != nil {
-			log.Printf("从队列获取任务失败: %v", err)
+			log.Printf("[Worker-%d] 从队列获取任务失败: %v", w.id, err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -80,8 +83,8 @@ func (w *Worker) run() {
 // processJob 处理单个任务
 func (w *Worker) processJob(job *models.TranscriptionJob) {
 	log.Printf("\n" + strings.Repeat("=", 80))
-	log.Printf("📝 开始处理任务: %s", job.JobID)
-	log.Printf("📂 文件名: %s", job.Filename)
+	log.Printf("[Worker-%d] 📝 开始处理任务: %s", w.id, job.JobID)
+	log.Printf("[Worker-%d] 📂 文件名: %s", w.id, job.Filename)
 
 	// 更新状态为处理中
 	w.store.Update(job.JobID, func(j *models.TranscriptionJob) {
@@ -94,7 +97,7 @@ func (w *Worker) processJob(job *models.TranscriptionJob) {
 		w.store.Update(job.JobID, func(j *models.TranscriptionJob) {
 			j.Progress = progress
 		})
-		log.Printf("任务 %s 进度: %d%%", job.JobID, progress)
+		log.Printf("[Worker-%d] 任务 %s 进度: %d%%", w.id, job.JobID, progress)
 	}
 
 	// 创建任务特定的 Context（30 分钟超时）
@@ -107,7 +110,7 @@ func (w *Worker) processJob(job *models.TranscriptionJob) {
 
 	if err != nil {
 		// 处理失败
-		log.Printf("❌ 任务 %s 失败: %v", job.JobID, err)
+		log.Printf("[Worker-%d] ❌ 任务 %s 失败: %v", w.id, job.JobID, err)
 		w.store.Update(job.JobID, func(j *models.TranscriptionJob) {
 			j.Status = models.StatusFailed
 			j.Error = err.Error()
@@ -118,9 +121,9 @@ func (w *Worker) processJob(job *models.TranscriptionJob) {
 
 	// 处理成功
 	duration := time.Since(startTime)
-	log.Printf("🎉 任务 %s 完成！", job.JobID)
-	log.Printf("⏱️  总耗时: %.2f 秒 (%.2f 分钟)", duration.Seconds(), duration.Minutes())
-	log.Printf("📝 转换结果长度: %d 字符", len(result))
+	log.Printf("[Worker-%d] 🎉 任务 %s 完成！", w.id, job.JobID)
+	log.Printf("[Worker-%d] ⏱️  总耗时: %.2f 秒 (%.2f 分钟)", w.id, duration.Seconds(), duration.Minutes())
+	log.Printf("[Worker-%d] 📝 转换结果长度: %d 字符", w.id, len(result))
 	log.Printf(strings.Repeat("=", 80) + "\n")
 
 	w.store.Update(job.JobID, func(j *models.TranscriptionJob) {

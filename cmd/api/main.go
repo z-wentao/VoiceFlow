@@ -28,7 +28,7 @@ type App struct {
 	config    *config.Config
 	queue     queue.Queue
 	store     *storage.JobStore
-	worker    *worker.Worker
+	workers   []*worker.Worker // 改为 Worker 池
 	engine    *transcriber.TranscriptionEngine
 	extractor *vocabulary.Extractor
 }
@@ -77,10 +77,15 @@ func main() {
 	app.extractor = vocabulary.NewExtractor(cfg.OpenAI.APIKey)
 	log.Println("✓ 单词提取器初始化成功")
 
-	// 5. 启动 Worker
-	app.worker = worker.NewWorker(app.queue, app.store, app.engine)
-	app.worker.Start()
-	log.Println("✓ Worker 已启动")
+	// 5. 启动 Worker 池
+	workerPoolSize := cfg.Transcriber.WorkerPoolSize
+	app.workers = make([]*worker.Worker, workerPoolSize)
+
+	log.Printf("🚀 正在启动 %d 个 Worker 实例...", workerPoolSize)
+	for i := 0; i < workerPoolSize; i++ {
+		app.workers[i] = worker.NewWorker(i+1, app.queue, app.store, app.engine)
+		app.workers[i].Start()
+	}
 
 	// 6. 启动 HTTP 服务器
 	router := app.setupRouter()
@@ -88,7 +93,8 @@ func main() {
 
 	log.Printf("🚀 VoiceFlow 服务器启动在 http://localhost:%d", cfg.Server.Port)
 	log.Printf("📝 配置信息:")
-	log.Printf("   - 并发 Worker: %d", cfg.Transcriber.WorkerCount)
+	log.Printf("   - Worker 实例数: %d (同时处理 %d 个音频文件)", cfg.Transcriber.WorkerPoolSize, cfg.Transcriber.WorkerPoolSize)
+	log.Printf("   - 每个音频的并发分段数: %d", cfg.Transcriber.WorkerCount)
 	log.Printf("   - 音频分片时长: %d 秒", cfg.Transcriber.SegmentDuration)
 	log.Printf("   - 队列类型: %s", cfg.Queue.Type)
 
@@ -105,7 +111,13 @@ func main() {
 	<-quit
 
 	log.Println("🛑 正在关闭服务器...")
-	app.worker.Stop()
+
+	// 停止所有 Worker
+	for i, w := range app.workers {
+		log.Printf("正在停止 Worker #%d...", i+1)
+		w.Stop()
+	}
+
 	app.queue.Close()
 	log.Println("✓ 服务器已关闭")
 }

@@ -22,7 +22,8 @@ type OpenAIConfig struct {
 
 // TranscriberConfig 转换器配置
 type TranscriberConfig struct {
-	WorkerCount     int `yaml:"worker_count"`
+	WorkerPoolSize  int `yaml:"worker_pool_size"`  // Worker 实例数量（同时处理多少个音频文件）
+	WorkerCount     int `yaml:"worker_count"`      // 每个音频文件的并发分段数
 	SegmentDuration int `yaml:"segment_duration"`
 	MaxRetries      int `yaml:"max_retries"`
 }
@@ -72,6 +73,10 @@ func LoadConfig(configPath string) (*Config, error) {
 func (c *Config) Validate() error {
 	if c.OpenAI.APIKey == "" || c.OpenAI.APIKey == "your-openai-api-key-here" {
 		return fmt.Errorf("请在配置文件中设置有效的 OpenAI API Key")
+	}
+
+	if c.Transcriber.WorkerPoolSize <= 0 {
+		c.Transcriber.WorkerPoolSize = 2 // 默认 2 个 Worker 实例
 	}
 
 	if c.Transcriber.WorkerCount <= 0 {
