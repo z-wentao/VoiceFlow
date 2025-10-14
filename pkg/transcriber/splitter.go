@@ -174,7 +174,13 @@ func (as *AudioSplitter) extractSegment(inputPath, outputPath string, startTime,
 func (as *AudioSplitter) Cleanup(segments []models.Segment) error {
 	if len(segments) > 0 {
 		segmentsDir := filepath.Dir(segments[0].FilePath)
-		return os.RemoveAll(segmentsDir)
+		// 只删除临时创建的 segments 目录，不删除 uploads 等原始目录
+		// 通过检查目录名是否为 "segments" 来判断
+		if filepath.Base(segmentsDir) == "segments" {
+			log.Printf("🧹 清理临时片段目录: %s", segmentsDir)
+			return os.RemoveAll(segmentsDir)
+		}
+		log.Printf("✓ 跳过清理原始文件目录: %s", segmentsDir)
 	}
 	return nil
 }
