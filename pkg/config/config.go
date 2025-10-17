@@ -12,6 +12,7 @@ type Config struct {
 	OpenAI      OpenAIConfig      `yaml:"openai"`
 	Transcriber TranscriberConfig `yaml:"transcriber"`
 	Queue       QueueConfig       `yaml:"queue"`
+	Storage     StorageConfig     `yaml:"storage"`
 	Server      ServerConfig      `yaml:"server"`
 }
 
@@ -39,6 +40,20 @@ type QueueConfig struct {
 type RabbitMQConfig struct {
 	URL       string `yaml:"url"`
 	QueueName string `yaml:"queue_name"`
+}
+
+// StorageConfig 存储配置
+type StorageConfig struct {
+	Type  string      `yaml:"type"`  // 存储类型: memory 或 redis
+	Redis RedisConfig `yaml:"redis"` // Redis 配置
+}
+
+// RedisConfig Redis 配置
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`     // Redis 地址，如 "localhost:6379"
+	Password string `yaml:"password"` // 密码，无密码留空
+	DB       int    `yaml:"db"`       // 数据库编号，默认 0
+	TTL      int    `yaml:"ttl"`      // 数据过期时间（小时），默认 168（7天）
 }
 
 // ServerConfig 服务器配置
@@ -89,6 +104,20 @@ func (c *Config) Validate() error {
 
 	if c.Server.Port <= 0 {
 		c.Server.Port = 8080
+	}
+
+	// 存储配置默认值
+	if c.Storage.Type == "" {
+		c.Storage.Type = "memory"
+	}
+
+	if c.Storage.Type == "redis" {
+		if c.Storage.Redis.Addr == "" {
+			c.Storage.Redis.Addr = "localhost:6379"
+		}
+		if c.Storage.Redis.TTL <= 0 {
+			c.Storage.Redis.TTL = 168 // 默认 7 天
+		}
 	}
 
 	return nil

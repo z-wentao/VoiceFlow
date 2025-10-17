@@ -58,7 +58,7 @@ func (js *JobStore) Update(jobID string, updateFn func(*models.TranscriptionJob)
 }
 
 // List 列出所有任务
-func (js *JobStore) List() []*models.TranscriptionJob {
+func (js *JobStore) List() ([]*models.TranscriptionJob, error) {
 	js.mu.RLock()
 	defer js.mu.RUnlock()
 
@@ -67,5 +67,10 @@ func (js *JobStore) List() []*models.TranscriptionJob {
 		jobs = append(jobs, job)
 	}
 
-	return jobs
+	return jobs, nil
+}
+
+// Close 关闭存储（内存存储无需关闭）
+func (js *JobStore) Close() error {
+	return nil
 }

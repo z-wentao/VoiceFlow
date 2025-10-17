@@ -17,7 +17,7 @@ import (
 type Worker struct {
 	id     int    // Worker ID，用于日志标识
 	queue  queue.Queue
-	store  *storage.JobStore
+	store  storage.Store // 使用接口类型，支持多种存储实现
 	engine *transcriber.TranscriptionEngine
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -27,7 +27,7 @@ type Worker struct {
 func NewWorker(
 	id int,
 	q queue.Queue,
-	store *storage.JobStore,
+	store storage.Store,
 	engine *transcriber.TranscriptionEngine,
 ) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())

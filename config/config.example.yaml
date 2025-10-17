@@ -21,6 +21,17 @@ queue:
     url: "amqp://guest:guest@localhost:5672/"
     queue_name: "voiceflow_jobs"
 
+# 存储配置（新增）
+storage:
+  type: "memory"            # 存储类型: memory（内存） 或 redis（持久化）
+
+  # Redis 配置（当 type 为 redis 时使用）
+  redis:
+    addr: "localhost:6379"  # Redis 地址
+    password: ""            # Redis 密码（无密码留空）
+    db: 0                   # 数据库编号
+    ttl: 168                # 数据过期时间（小时），默认 168（7天）
+
 # 服务器配置
 server:
   port: 8080                # 服务器端口

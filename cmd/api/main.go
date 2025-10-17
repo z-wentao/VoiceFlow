@@ -27,8 +27,8 @@ import (
 type App struct {
 	config    *config.Config
 	queue     queue.Queue
-	store     *storage.JobStore
-	workers   []*worker.Worker // 改为 Worker 池
+	store     storage.Store // 改为接口类型，支持多种存储实现
+	workers   []*worker.Worker
 	engine    *transcriber.TranscriptionEngine
 	extractor *vocabulary.Extractor
 }
@@ -49,10 +49,30 @@ func main() {
 	// 3. 初始化组件
 	app := &App{
 		config: cfg,
-		store:  storage.NewJobStore(),
 	}
 
-	// 3. 初始化队列（根据配置选择类型）
+	// 4. 初始化存储（根据配置选择类型）
+	switch cfg.Storage.Type {
+	case "memory":
+		app.store = storage.NewJobStore()
+		log.Println("✓ 使用内存存储")
+	case "redis":
+		ttl := time.Duration(cfg.Storage.Redis.TTL) * time.Hour
+		app.store, err = storage.NewRedisJobStore(
+			cfg.Storage.Redis.Addr,
+			cfg.Storage.Redis.Password,
+			cfg.Storage.Redis.DB,
+			ttl,
+		)
+		if err != nil {
+			log.Fatalf("❌ 初始化 Redis 存储失败: %v", err)
+		}
+		log.Printf("✓ 使用 Redis 存储 (地址: %s, TTL: %d 小时)", cfg.Storage.Redis.Addr, cfg.Storage.Redis.TTL)
+	default:
+		log.Fatalf("❌ 不支持的存储类型: %s", cfg.Storage.Type)
+	}
+
+	// 6. 初始化队列（根据配置选择类型）
 	switch cfg.Queue.Type {
 	case "memory":
 		app.queue = queue.NewMemoryQueue(cfg.Queue.BufferSize)
@@ -65,7 +85,7 @@ func main() {
 		log.Fatalf("❌ 不支持的队列类型: %s", cfg.Queue.Type)
 	}
 
-	// 4. 初始化转换引擎
+	// 8. 初始化转换引擎
 	app.engine = transcriber.NewTranscriptionEngine(
 		cfg.OpenAI.APIKey,
 		cfg.Transcriber.SegmentConcurrency,
@@ -73,11 +93,11 @@ func main() {
 	)
 	log.Println("✓ 转换引擎初始化成功")
 
-	// 4.1 初始化单词提取器
+	// 9. 初始化单词提取器
 	app.extractor = vocabulary.NewExtractor(cfg.OpenAI.APIKey)
 	log.Println("✓ 单词提取器初始化成功")
 
-	// 5. 启动 Worker 池
+	// 11. 启动 Worker 池
 	workerPoolSize := cfg.Transcriber.WorkerPoolSize
 	app.workers = make([]*worker.Worker, workerPoolSize)
 
@@ -87,7 +107,7 @@ func main() {
 		app.workers[i].Start()
 	}
 
-	// 6. 启动 HTTP 服务器
+	// 12. 启动 HTTP 服务器
 	router := app.setupRouter()
 	port := fmt.Sprintf(":%d", cfg.Server.Port)
 
@@ -97,8 +117,9 @@ func main() {
 	log.Printf("   - 每个音频的分片并发数: %d", cfg.Transcriber.SegmentConcurrency)
 	log.Printf("   - 音频分片时长: %d 秒", cfg.Transcriber.SegmentDuration)
 	log.Printf("   - 队列类型: %s", cfg.Queue.Type)
+	log.Printf("   - 存储类型: %s", cfg.Storage.Type)
 
-	// 7. 优雅关闭（面试亮点）
+	// 13. 优雅关闭（面试亮点）
 	go func() {
 		if err := router.Run(port); err != nil {
 			log.Fatalf("❌ 服务器启动失败: %v", err)
@@ -118,7 +139,9 @@ func main() {
 		w.Stop()
 	}
 
+	// 关闭队列和存储
 	app.queue.Close()
+	app.store.Close()
 	log.Println("✓ 服务器已关闭")
 }
 
@@ -260,7 +283,11 @@ func (app *App) handleGetJob(c *gin.Context) {
 
 // handleListJobs 列出所有任务
 func (app *App) handleListJobs(c *gin.Context) {
-	jobs := app.store.List()
+	jobs, err := app.store.List()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "获取任务列表失败"})
+		return
+	}
 	c.JSON(200, gin.H{
 		"jobs":  jobs,
 		"total": len(jobs),
