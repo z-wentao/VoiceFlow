@@ -23,16 +23,30 @@ queue:
 
 # 存储配置（新增）
 storage:
-  type: "memory"            # 存储类型: memory（内存） 或 redis（持久化）
+  type: "memory"            # 存储类型: memory/redis/postgres/hybrid
 
-  # Redis 配置（当 type 为 redis 时使用）
+  # Redis 配置（当 type 为 redis 或 hybrid 时使用）
   redis:
     addr: "localhost:6379"  # Redis 地址
     password: ""            # Redis 密码（无密码留空）
     db: 0                   # 数据库编号
     ttl: 168                # 数据过期时间（小时），默认 168（7天）
 
+  # PostgreSQL 配置（当 type 为 postgres 或 hybrid 时使用）
+  postgres:
+    host: "localhost"       # 数据库主机
+    port: 5432              # 数据库端口
+    user: "postgres"        # 用户名
+    password: "password"    # 密码
+    database: "voiceflow"   # 数据库名
+    sslmode: "disable"      # SSL模式: disable/require/verify-ca/verify-full
+
 # 服务器配置
 server:
   port: 8080                # 服务器端口
   max_upload_size: 104857600  # 最大上传文件大小（字节），默认 100MB
+
+# Maimemo 微服务配置（新增）
+maimemo_service:
+  url: "http://localhost:8081"  # Maimemo 微服务地址
+  timeout: 30                   # 超时时间（秒）

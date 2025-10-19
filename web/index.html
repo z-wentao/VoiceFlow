@@ -4,495 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceFlow - 音频转文字平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 40px;
-        }
-
-        .header h1 {
-            font-size: 3em;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            font-size: 1.2em;
-            opacity: 0.9;
-        }
-
-        .card {
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            margin-bottom: 20px;
-        }
-
-        /* ========== 上传区域 ========== */
-        .upload-box {
-            border: 3px dashed #ddd;
-            padding: 60px 40px;
-            text-align: center;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .upload-box:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-
-        .upload-box.dragging {
-            border-color: #667eea;
-            background: #f0f0ff;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: transform 0.2s;
-            margin-top: 15px;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* ========== 任务列表 ========== */
-        .tasks-section {
-            margin-top: 30px;
-        }
-
-        .tasks-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .tasks-header h2 {
-            font-size: 24px;
-            color: #333;
-        }
-
-        .tasks-count {
-            background: #667eea;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .tasks-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
-        }
-
-        .empty-state p {
-            font-size: 18px;
-            margin-top: 10px;
-        }
-
-        /* ========== 任务卡片 ========== */
-        .task-card {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 20px;
-            transition: all 0.3s;
-            border: 2px solid transparent;
-        }
-
-        .task-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-        }
-
-        .task-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-        }
-
-        .task-info {
-            flex: 1;
-        }
-
-        .task-filename {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .task-meta {
-            font-size: 13px;
-            color: #666;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .badge.pending { background: #ffc107; color: #000; }
-        .badge.processing { background: #2196F3; color: white; }
-        .badge.completed { background: #4CAF50; color: white; }
-        .badge.failed { background: #f44336; color: white; }
-
-        .task-actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .task-toggle {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: #667eea;
-            transition: transform 0.3s;
-            padding: 0;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .task-toggle.expanded {
-            transform: rotate(180deg);
-        }
-
-        .action-btn {
-            background: none;
-            border: 1px solid #ddd;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            color: #666;
-            transition: all 0.2s;
-        }
-
-        .action-btn:hover {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-
-        /* ========== 任务详情（展开部分）========== */
-        .task-details {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            display: none;
-        }
-
-        .task-details.show {
-            display: block;
-            animation: slideDown 0.3s ease;
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .progress-section {
-            margin-bottom: 20px;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #e0e0e0;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.3s;
-        }
-
-        .progress-text {
-            font-size: 13px;
-            color: #666;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .result-box {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .result-text {
-            line-height: 1.8;
-            color: #333;
-            white-space: pre-wrap;
-            font-size: 14px;
-        }
-
-        .error-box {
-            background: #ffebee;
-            color: #c62828;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 10px;
-            font-size: 14px;
-        }
-
-        /* ========== 单词列表 ========== */
-        .vocab-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
-        }
-
-        .vocab-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .vocab-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 12px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .vocab-item {
-            background: #fff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 12px;
-            transition: all 0.2s;
-        }
-
-        .vocab-item:hover {
-            border-color: #667eea;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
-        }
-
-        .vocab-word {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        .vocab-def {
-            font-size: 13px;
-            color: #666;
-            margin-bottom: 5px;
-        }
-
-        .vocab-example {
-            font-size: 12px;
-            color: #999;
-            font-style: italic;
-        }
-
-        .maimemo-form {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-            display: none;
-        }
-
-        .maimemo-form.show {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 12px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .btn-small {
-            padding: 8px 16px;
-            font-size: 13px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #5568d3;
-        }
-
-        .btn-secondary {
-            background: #e0e0e0;
-            color: #666;
-        }
-
-        .btn-secondary:hover {
-            background: #d0d0d0;
-        }
-
-        .btn-link {
-            background: none;
-            color: #667eea;
-            padding: 0;
-            border: none;
-            cursor: pointer;
-            font-size: 13px;
-            text-decoration: underline;
-        }
-
-        .btn-link:hover {
-            color: #5568d3;
-        }
-
-        .notepad-list {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            max-height: 200px;
-            overflow-y: auto;
-            margin-top: 10px;
-            display: none;
-        }
-
-        .notepad-list.show {
-            display: block;
-        }
-
-        .notepad-item {
-            padding: 10px;
-            border-bottom: 1px solid #f0f0f0;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .notepad-item:last-child {
-            border-bottom: none;
-        }
-
-        .notepad-item:hover {
-            background: #f8f9fa;
-        }
-
-        .notepad-item-name {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 3px;
-        }
-
-        .notepad-item-meta {
-            font-size: 12px;
-            color: #999;
-        }
-
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
         .spinner {
             display: inline-block;
             width: 16px;
@@ -502,57 +19,45 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-
-        /* ========== 响应式设计 ========== */
-        @media (max-width: 768px) {
-            .task-meta {
-                flex-direction: column;
-                gap: 5px;
-                align-items: flex-start;
-            }
-
-            .task-actions {
-                flex-direction: column;
-            }
+        .task-toggle.expanded {
+            transform: rotate(180deg);
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎙️ VoiceFlow</h1>
-            <p>音频转文字平台 - 支持多文件并发处理</p>
+<body class="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 min-h-screen p-4 md:p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="text-center text-white mb-8">
+            <h1 class="text-5xl md:text-6xl font-bold mb-3">🎙️ VoiceFlow</h1>
+            <p class="text-xl opacity-90">音频转文字平台 - 支持多文件并发处理</p>
         </div>
 
-        <!-- 上传区域 -->
-        <div class="card">
-            <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
-                <p style="font-size: 60px; margin: 0;">📁</p>
-                <p style="font-size: 18px; margin: 20px 0 10px 0; font-weight: 600;">点击或拖拽上传音频/视频文件</p>
-                <p style="color: #999; font-size: 14px;">支持 MP3, MP4, WAV, M4A, FLAC, AAC 等格式 · 最大 300MB</p>
-                <p style="color: #999; font-size: 13px; margin-top: 5px;">💡 支持多文件同时上传</p>
-                <input type="file" id="fileInput" accept="audio/*,video/mp4,video/webm" multiple onchange="handleFileSelect(event)">
-            </div>
-
-            <div id="uploadingFiles" style="margin-top: 20px; display: none;">
-                <h3 style="margin-bottom: 10px; color: #666;">正在上传...</h3>
-                <div id="uploadingList"></div>
+        <!-- Upload Card -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8 mb-6">
+            <div
+                id="uploadBox"
+                onclick="document.getElementById('fileInput').click()"
+                class="border-3 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer transition-all duration-300 hover:border-indigo-500 hover:bg-indigo-50"
+            >
+                <p class="text-6xl mb-4">📁</p>
+                <p class="text-lg font-semibold text-gray-800 mb-2">点击或拖拽上传音频/视频文件</p>
+                <p class="text-sm text-gray-500">支持 MP3, MP4, WAV, M4A, FLAC, AAC 等格式 · 最大 300MB</p>
+                <p class="text-xs text-gray-400 mt-2">💡 支持多文件同时上传</p>
+                <input type="file" id="fileInput" class="hidden" accept="audio/*,video/mp4,video/webm" multiple onchange="handleFileSelect(event)">
             </div>
         </div>
 
-        <!-- 任务列表 -->
-        <div class="card">
-            <div class="tasks-section">
-                <div class="tasks-header">
-                    <h2>📋 任务列表</h2>
-                    <span class="tasks-count" id="tasksCount">0 个任务</span>
-                </div>
+        <!-- Tasks Card -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">📋 任务列表</h2>
+                <span id="tasksCount" class="bg-indigo-500 text-white px-4 py-1 rounded-full text-sm font-semibold">0 个任务</span>
+            </div>
 
-                <div id="tasksList" class="tasks-list">
-                    <div class="empty-state">
-                        <p style="font-size: 48px;">📭</p>
-                        <p>暂无任务，上传文件开始吧！</p>
-                    </div>
+            <div id="tasksList" class="space-y-4">
+                <div class="text-center py-16 text-gray-400">
+                    <p class="text-5xl mb-3">📭</p>
+                    <p class="text-lg">暂无任务，上传文件开始吧！</p>
                 </div>
             </div>
         </div>
@@ -561,47 +66,56 @@
     <script>
         // ========== 全局状态管理 ==========
         const state = {
-            jobs: {},           // 所有任务 { jobId: job }
-            expandedJobs: {},   // 展开状态 { jobId: true/false }
-            pollInterval: null  // 轮询定时器
+            jobs: {},
+            expandedJobs: {},
+            pollInterval: null,
+            maimemoConfig: {
+                token: localStorage.getItem('maimemo_token') || '',
+                notepadId: localStorage.getItem('maimemo_notepad_id') || ''
+            }
         };
 
-        // ========== 文件上传处理 ==========
-        function handleFileSelect(event) {
-            const files = Array.from(event.target.files);
-            if (files.length === 0) return;
-
-            files.forEach(file => uploadFile(file));
-
-            // 清空文件选择
-            document.getElementById('fileInput').value = '';
+        // ========== localStorage 管理 ==========
+        function saveMaimemoConfig(token, notepadId) {
+            if (token) {
+                localStorage.setItem('maimemo_token', token);
+                state.maimemoConfig.token = token;
+            }
+            if (notepadId) {
+                localStorage.setItem('maimemo_notepad_id', notepadId);
+                state.maimemoConfig.notepadId = notepadId;
+            }
         }
 
-        // 拖拽上传
+        // ========== 拖拽上传 ==========
         const uploadBox = document.getElementById('uploadBox');
 
         uploadBox.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadBox.classList.add('dragging');
+            uploadBox.classList.add('border-indigo-500', 'bg-indigo-100');
         });
 
         uploadBox.addEventListener('dragleave', () => {
-            uploadBox.classList.remove('dragging');
+            uploadBox.classList.remove('border-indigo-500', 'bg-indigo-100');
         });
 
         uploadBox.addEventListener('drop', (e) => {
             e.preventDefault();
-            uploadBox.classList.remove('dragging');
-
+            uploadBox.classList.remove('border-indigo-500', 'bg-indigo-100');
             const files = Array.from(e.dataTransfer.files);
             files.forEach(file => uploadFile(file));
         });
 
-        // 上传单个文件
+        // ========== 文件上传 ==========
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+            files.forEach(file => uploadFile(file));
+            document.getElementById('fileInput').value = '';
+        }
+
         async function uploadFile(file) {
             console.log('上传文件:', file.name);
-
-            // 构造表单数据
             const formData = new FormData();
             formData.append('audio', file);
 
@@ -614,9 +128,6 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    console.log('上传成功:', data);
-
-                    // 添加到任务列表
                     const job = {
                         job_id: data.job_id,
                         filename: data.filename,
@@ -626,7 +137,6 @@
                         error: '',
                         created_at: new Date().toISOString()
                     };
-
                     addJob(job);
                     startPolling();
                 } else {
@@ -641,27 +151,72 @@
         // ========== 任务管理 ==========
         function addJob(job) {
             state.jobs[job.job_id] = job;
-            state.expandedJobs[job.job_id] = false; // 默认折叠
+            state.expandedJobs[job.job_id] = false;
             renderTasks();
         }
 
         function updateJob(jobId, updates) {
-            if (state.jobs[jobId]) {
-                Object.assign(state.jobs[jobId], updates);
-                renderTasks();
+            if (!state.jobs[jobId]) return;
+            const job = state.jobs[jobId];
+            let changed = false;
+
+            for (const key in updates) {
+                if (JSON.stringify(job[key]) !== JSON.stringify(updates[key])) {
+                    changed = true;
+                    break;
+                }
             }
+
+            if (!changed) return;
+            Object.assign(job, updates);
+            updateTaskCard(jobId);
         }
 
         function toggleJobExpanded(jobId) {
             state.expandedJobs[jobId] = !state.expandedJobs[jobId];
-            renderTasks();
+            const taskCard = document.querySelector(`[data-job-id="${jobId}"]`);
+            if (taskCard) {
+                const details = taskCard.querySelector('.task-details');
+                const toggle = taskCard.querySelector('.task-toggle');
+                if (state.expandedJobs[jobId]) {
+                    details.classList.remove('hidden');
+                    toggle.classList.add('expanded');
+                } else {
+                    details.classList.add('hidden');
+                    toggle.classList.remove('expanded');
+                }
+            }
         }
 
-        function deleteJob(jobId) {
-            if (confirm('确定要删除这个任务吗？')) {
-                delete state.jobs[jobId];
-                delete state.expandedJobs[jobId];
-                renderTasks();
+        async function deleteJob(jobId) {
+            if (!confirm('确定要删除这个任务吗？')) return;
+
+            try {
+                const response = await fetch(`/api/jobs/${jobId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 删除成功，从本地状态中移除
+                    delete state.jobs[jobId];
+                    delete state.expandedJobs[jobId];
+                    renderTasks();
+                    console.log('任务已删除:', jobId);
+                } else {
+                    alert(`删除失败: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('删除任务失败:', error);
+                alert(`删除失败: ${error.message}`);
+            }
+        }
+
+        function toggleAudioPlayer(jobId) {
+            const player = document.getElementById(`audioPlayer-${jobId}`);
+            if (player) {
+                player.classList.toggle('hidden');
             }
         }
 
@@ -680,132 +235,173 @@
             URL.revokeObjectURL(url);
         }
 
-        // ========== 渲染任务列表 ==========
+        // ========== 渲染 ==========
         function renderTasks() {
             const tasksList = document.getElementById('tasksList');
             const tasksCount = document.getElementById('tasksCount');
-
             const jobsArray = Object.values(state.jobs);
             const jobCount = jobsArray.length;
 
-            // 更新计数
             tasksCount.textContent = `${jobCount} 个任务`;
 
             if (jobCount === 0) {
                 tasksList.innerHTML = `
-                    <div class="empty-state">
-                        <p style="font-size: 48px;">📭</p>
-                        <p>暂无任务，上传文件开始吧！</p>
+                    <div class="text-center py-16 text-gray-400">
+                        <p class="text-5xl mb-3">📭</p>
+                        <p class="text-lg">暂无任务，上传文件开始吧！</p>
                     </div>
                 `;
                 return;
             }
 
-            // 按创建时间倒序排列（最新的在上面）
             jobsArray.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
             tasksList.innerHTML = jobsArray.map(job => renderTaskCard(job)).join('');
+        }
+
+        function updateTaskCard(jobId) {
+            const job = state.jobs[jobId];
+            if (!job) return;
+
+            const taskCard = document.querySelector(`[data-job-id="${jobId}"]`);
+            if (!taskCard) {
+                renderTasks();
+                return;
+            }
+
+            const isExpanded = state.expandedJobs[jobId];
+            const tokenInput = taskCard.querySelector(`#token-${jobId}`);
+            const notepadInput = taskCard.querySelector(`#notepadId-${jobId}`);
+            const currentToken = tokenInput ? tokenInput.value : '';
+            const currentNotepadId = notepadInput ? notepadInput.value : '';
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = renderTaskCard(job);
+            const newTaskCard = tempDiv.firstElementChild;
+
+            if (isExpanded) {
+                const details = newTaskCard.querySelector('.task-details');
+                const toggle = newTaskCard.querySelector('.task-toggle');
+                if (details) details.classList.remove('hidden');
+                if (toggle) toggle.classList.add('expanded');
+            }
+
+            taskCard.replaceWith(newTaskCard);
+
+            if (currentToken || currentNotepadId) {
+                const newTokenInput = newTaskCard.querySelector(`#token-${jobId}`);
+                const newNotepadInput = newTaskCard.querySelector(`#notepadId-${jobId}`);
+                if (newTokenInput && currentToken) newTokenInput.value = currentToken;
+                if (newNotepadInput && currentNotepadId) newNotepadInput.value = currentNotepadId;
+            }
         }
 
         function renderTaskCard(job) {
             const isExpanded = state.expandedJobs[job.job_id];
-            const statusText = {
-                'pending': '等待处理',
-                'processing': '处理中',
-                'completed': '已完成',
-                'failed': '失败'
-            }[job.status] || '未知';
-
-            const showSpinner = job.status === 'processing';
-            const showProgress = job.status === 'processing' || job.status === 'completed';
-            const showResult = job.status === 'completed' && job.result;
-            const showError = job.status === 'failed' && job.error;
+            const statusConfig = {
+                'pending': { text: '等待处理', class: 'bg-yellow-400 text-black' },
+                'processing': { text: '处理中', class: 'bg-blue-500 text-white' },
+                'completed': { text: '已完成', class: 'bg-green-500 text-white' },
+                'failed': { text: '失败', class: 'bg-red-500 text-white' }
+            };
+            const status = statusConfig[job.status] || { text: '未知', class: 'bg-gray-500 text-white' };
 
             return `
-                <div class="task-card">
-                    <div class="task-header" onclick="toggleJobExpanded('${job.job_id}')">
-                        <div class="task-info">
-                            <div class="task-filename">
-                                <span>${job.filename}</span>
-                                ${showSpinner ? '<span class="spinner"></span>' : ''}
+                <div class="bg-gray-50 rounded-xl p-5 border-2 border-transparent hover:border-indigo-500 hover:shadow-lg transition-all duration-300" data-job-id="${job.job_id}">
+                    <div class="flex justify-between items-center cursor-pointer" onclick="toggleJobExpanded('${job.job_id}')">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-base font-semibold text-gray-800">${escapeHtml(job.filename)}</span>
+                                ${job.status === 'processing' ? '<span class="spinner"></span>' : ''}
                             </div>
-                            <div class="task-meta">
-                                <span class="badge ${job.status}">${statusText}</span>
+                            <div class="flex items-center gap-3 text-sm text-gray-600">
+                                <span class="px-3 py-1 rounded-full text-xs font-semibold uppercase ${status.class}">${status.text}</span>
                                 ${job.progress > 0 ? `<span>进度: ${job.progress}%</span>` : ''}
                                 <span>${formatTime(job.created_at)}</span>
                             </div>
                         </div>
-                        <div class="task-actions" onclick="event.stopPropagation()">
+                        <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+                            <button onclick="toggleAudioPlayer('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">🎵 播放</button>
                             ${job.status === 'completed' ? `
-                                <button class="action-btn" onclick="downloadResult('${job.job_id}')">📥 下载</button>
-                                <button class="action-btn" onclick="extractVocabulary('${job.job_id}')">📚 提取单词</button>
+                                <button onclick="downloadResult('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">📥 下载</button>
+                                <button onclick="extractVocabulary('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">📚 提取单词</button>
                             ` : ''}
-                            <button class="action-btn" onclick="deleteJob('${job.job_id}')">🗑️ 删除</button>
-                            <button class="task-toggle ${isExpanded ? 'expanded' : ''}">▼</button>
+                            <button onclick="deleteJob('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors">🗑️ 删除</button>
+                            <button class="task-toggle text-indigo-500 text-2xl w-8 h-8 flex items-center justify-center transition-transform duration-300 ${isExpanded ? 'expanded' : ''}">▼</button>
                         </div>
                     </div>
 
-                    <div class="task-details ${isExpanded ? 'show' : ''}">
-                        ${showProgress ? `
-                            <div class="progress-section">
-                                <div class="progress-text">
+                    <div class="task-details mt-5 pt-5 border-t border-gray-200 ${isExpanded ? '' : 'hidden'}">
+                        <!-- 音频播放器 -->
+                        <div id="audioPlayer-${job.job_id}" class="hidden mb-5">
+                            <h4 class="font-semibold text-gray-800 mb-2">🎵 音频播放</h4>
+                            <audio controls class="w-full" src="/${job.file_path}">
+                                您的浏览器不支持音频播放
+                            </audio>
+                        </div>
+
+                        ${(job.status === 'processing' || job.status === 'completed') && job.progress > 0 ? `
+                            <div class="mb-5">
+                                <div class="flex justify-between text-sm text-gray-600 mb-2">
                                     <span>转换进度</span>
                                     <span>${job.progress}%</span>
                                 </div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${job.progress}%"></div>
+                                <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300" style="width: ${job.progress}%"></div>
                                 </div>
                             </div>
                         ` : ''}
 
-                        ${showResult ? `
-                            <div>
-                                <h4 style="margin-bottom: 10px;">转录结果</h4>
-                                <div class="result-box">
-                                    <div class="result-text">${escapeHtml(job.result)}</div>
+                        ${job.status === 'completed' && job.result ? `
+                            <div class="mb-5">
+                                <h4 class="font-semibold text-gray-800 mb-3">转录结果</h4>
+                                <div class="bg-white border border-gray-200 rounded-lg p-4 max-h-80 overflow-y-auto">
+                                    <div class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">${escapeHtml(job.result)}</div>
                                 </div>
                             </div>
                         ` : ''}
 
-                        ${showError ? `
-                            <div class="error-box">
+                        ${job.status === 'failed' && job.error ? `
+                            <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
                                 ❌ 错误: ${escapeHtml(job.error)}
                             </div>
                         ` : ''}
 
                         ${job.status === 'completed' && job.vocab_detail && job.vocab_detail.length > 0 ? `
-                            <div class="vocab-section">
-                                <div class="vocab-header">
-                                    <h4 style="margin: 0;">📚 提取的单词 (${job.vocab_detail.length})</h4>
-                                    <button class="action-btn" onclick="showMaimemoForm('${job.job_id}')">🔄 同步到墨墨</button>
+                            <div class="mt-5 pt-5 border-t border-gray-200">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h4 class="font-semibold text-gray-800">📚 提取的单词 (${job.vocab_detail.length})</h4>
+                                    <button onclick="showMaimemoForm('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">🔄 同步到墨墨</button>
                                 </div>
-                                <div class="vocab-list">
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                                     ${job.vocab_detail.map(word => `
-                                        <div class="vocab-item">
-                                            <div class="vocab-word">${escapeHtml(word.word)}</div>
-                                            <div class="vocab-def">${escapeHtml(word.definition)}</div>
-                                            ${word.example ? `<div class="vocab-example">${escapeHtml(word.example)}</div>` : ''}
+                                        <div class="bg-white border border-gray-200 rounded-lg p-3 hover:border-indigo-500 hover:shadow-md transition-all">
+                                            <div class="font-semibold text-gray-800 mb-1">${escapeHtml(word.word)}</div>
+                                            <div class="text-sm text-gray-600 mb-1">${escapeHtml(word.definition)}</div>
+                                            ${word.example ? `<div class="text-xs text-gray-400 italic">${escapeHtml(word.example)}</div>` : ''}
                                         </div>
                                     `).join('')}
                                 </div>
 
-                                <div class="maimemo-form" id="maimemoForm-${job.job_id}">
-                                    <h4 style="margin-bottom: 10px;">同步到墨墨背单词</h4>
-                                    <div class="form-group">
-                                        <label>墨墨 API Token <a href="#" onclick="alert('获取方式：打开墨墨 APP → 我的 → 更多设置 → 实验功能 → 开放 API'); return false;" style="color: #667eea; font-size: 12px;">[如何获取?]</a></label>
-                                        <input type="text" id="token-${job.job_id}" placeholder="输入你的 Token">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>
-                                            云词本 ID
-                                            <button type="button" class="btn-link" onclick="loadNotepads('${job.job_id}')">🔍 查询我的云词本</button>
+                                <div id="maimemoForm-${job.job_id}" class="hidden mt-4 bg-gray-50 rounded-lg p-4">
+                                    <h4 class="font-semibold text-gray-800 mb-3">同步到墨墨背单词</h4>
+                                    <div class="mb-3">
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                                            墨墨 API Token
+                                            <a href="#" onclick="alert('获取方式：打开墨墨 APP → 我的 → 更多设置 → 实验功能 → 开放 API'); return false;" class="text-indigo-500 text-xs ml-1">[如何获取?]</a>
                                         </label>
-                                        <input type="text" id="notepadId-${job.job_id}" placeholder="输入云词本 ID 或点击查询选择">
-                                        <div class="notepad-list" id="notepadList-${job.job_id}"></div>
+                                        <input type="text" id="token-${job.job_id}" placeholder="输入你的 Token" value="${state.maimemoConfig.token}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500">
                                     </div>
-                                    <div class="form-actions">
-                                        <button class="btn-small btn-primary" onclick="syncToMaimemo('${job.job_id}')">确认同步</button>
-                                        <button class="btn-small btn-secondary" onclick="hideMaimemoForm('${job.job_id}')">取消</button>
+                                    <div class="mb-3">
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                                            云词本 ID
+                                            <button type="button" onclick="loadNotepads('${job.job_id}')" class="text-indigo-500 text-xs ml-1 underline">🔍 查询我的云词本</button>
+                                        </label>
+                                        <input type="text" id="notepadId-${job.job_id}" placeholder="输入云词本 ID 或点击查询选择" value="${state.maimemoConfig.notepadId}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500">
+                                        <div id="notepadList-${job.job_id}" class="hidden mt-2 bg-white border border-gray-300 rounded-lg max-h-48 overflow-y-auto"></div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button onclick="syncToMaimemo('${job.job_id}')" class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm">确认同步</button>
+                                        <button onclick="hideMaimemoForm('${job.job_id}')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm">取消</button>
                                     </div>
                                 </div>
                             </div>
@@ -815,14 +411,10 @@
             `;
         }
 
-        // ========== 轮询任务状态 ==========
+        // ========== 轮询 ==========
         function startPolling() {
-            if (state.pollInterval) return; // 已经在轮询
-
-            // 立即查询一次
+            if (state.pollInterval) return;
             pollAllJobs();
-
-            // 每 3 秒轮询一次
             state.pollInterval = setInterval(pollAllJobs, 3000);
         }
 
@@ -835,18 +427,13 @@
 
         async function pollAllJobs() {
             const jobsArray = Object.values(state.jobs);
-
-            // 过滤出需要轮询的任务（pending 和 processing）
-            const activeJobs = jobsArray.filter(job =>
-                job.status === 'pending' || job.status === 'processing'
-            );
+            const activeJobs = jobsArray.filter(job => job.status === 'pending' || job.status === 'processing');
 
             if (activeJobs.length === 0) {
-                stopPolling(); // 没有活跃任务，停止轮询
+                stopPolling();
                 return;
             }
 
-            // 并发查询所有活跃任务
             await Promise.all(activeJobs.map(job => pollJobStatus(job.job_id)));
         }
 
@@ -854,11 +441,8 @@
             try {
                 const response = await fetch(`/api/jobs/${jobId}`);
                 const job = await response.json();
-
                 if (response.ok) {
                     updateJob(jobId, job);
-                } else {
-                    console.error('查询任务状态失败:', jobId);
                 }
             } catch (error) {
                 console.error('轮询错误:', error);
@@ -883,132 +467,94 @@
             return div.innerHTML;
         }
 
-        // ========== 单词提取功能 ==========
+        // ========== 单词提取 ==========
         async function extractVocabulary(jobId) {
-            const job = state.jobs[jobId];
-            if (!job) return;
+            if (!confirm('确定要提取这个任务中的英文单词吗？\n\n这将使用 AI 分析文本内容，可能需要几秒钟。')) return;
 
-            if (confirm('确定要提取这个任务中的英文单词吗？\n\n这将使用 AI 分析文本内容，可能需要几秒钟。')) {
-                try {
-                    const response = await fetch(`/api/jobs/${jobId}/extract-vocabulary`, {
-                        method: 'POST'
+            try {
+                const response = await fetch(`/api/jobs/${jobId}/extract-vocabulary`, { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ 成功提取 ${data.count} 个单词！`);
+                    updateJob(jobId, {
+                        vocabulary: data.vocabulary,
+                        vocab_detail: data.vocab_detail
                     });
-
-                    const data = await response.json();
-
-                    if (response.ok) {
-                        alert(`✅ 成功提取 ${data.count} 个单词！`);
-                        // 更新任务数据
-                        updateJob(jobId, {
-                            vocabulary: data.vocabulary,
-                            vocab_detail: data.vocab_detail
-                        });
-                        // 展开任务详情以显示单词列表
-                        if (!state.expandedJobs[jobId]) {
-                            toggleJobExpanded(jobId);
-                        }
-                    } else {
-                        alert(`❌ 提取失败: ${data.error}`);
+                    if (!state.expandedJobs[jobId]) {
+                        toggleJobExpanded(jobId);
                     }
-                } catch (error) {
-                    console.error('提取单词错误:', error);
-                    alert(`❌ 提取失败: ${error.message}`);
+                } else {
+                    alert(`❌ 提取失败: ${data.error}`);
                 }
+            } catch (error) {
+                alert(`❌ 提取失败: ${error.message}`);
             }
         }
 
-        // ========== 墨墨背单词同步功能 ==========
+        // ========== 墨墨同步 ==========
         function showMaimemoForm(jobId) {
             const form = document.getElementById(`maimemoForm-${jobId}`);
             if (form) {
-                form.classList.add('show');
+                form.classList.remove('hidden');
+                const tokenInput = document.getElementById(`token-${jobId}`);
+                const notepadInput = document.getElementById(`notepadId-${jobId}`);
+                if (tokenInput && !tokenInput.value) tokenInput.value = state.maimemoConfig.token;
+                if (notepadInput && !notepadInput.value) notepadInput.value = state.maimemoConfig.notepadId;
             }
         }
 
         function hideMaimemoForm(jobId) {
             const form = document.getElementById(`maimemoForm-${jobId}`);
             if (form) {
-                form.classList.remove('show');
-                // 隐藏云词本列表
+                form.classList.add('hidden');
                 const notepadList = document.getElementById(`notepadList-${jobId}`);
-                if (notepadList) {
-                    notepadList.classList.remove('show');
-                }
+                if (notepadList) notepadList.classList.add('hidden');
             }
         }
 
-        // 查询云词本列表
         async function loadNotepads(jobId) {
             const token = document.getElementById(`token-${jobId}`).value.trim();
-
-            // 验证 Token
             if (!token) {
                 alert('请先输入墨墨 API Token');
                 return;
             }
 
             const notepadList = document.getElementById(`notepadList-${jobId}`);
-            notepadList.innerHTML = '<div style="padding: 10px; text-align: center;"><span class="spinner"></span> 查询中...</div>';
-            notepadList.classList.add('show');
+            notepadList.innerHTML = '<div class="p-3 text-center"><span class="spinner"></span> 查询中...</div>';
+            notepadList.classList.remove('hidden');
 
             try {
                 const response = await fetch('/api/maimemo/list-notepads', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: token })
                 });
 
                 const data = await response.json();
 
-                if (response.ok) {
-                    if (data.notepads && data.notepads.length > 0) {
-                        // 显示云词本列表
-                        notepadList.innerHTML = data.notepads.map(notepad => `
-                            <div class="notepad-item" onclick="selectNotepad('${jobId}', '${notepad.id}', '${escapeHtml(notepad.title || '未命名词本')}')">
-                                <div class="notepad-item-name">${escapeHtml(notepad.title || '未命名词本')}</div>
-                                <div class="notepad-item-meta">${notepad.brief ? escapeHtml(notepad.brief) : 'ID: ' + notepad.id}</div>
-                            </div>
-                        `).join('');
-                    } else {
-                        notepadList.innerHTML = `
-                            <div style="padding: 20px; text-align: center; color: #999;">
-                                <p>📭 您还没有创建云词本</p>
-                                <p style="font-size: 12px; margin-top: 5px;">请在墨墨 APP 中创建云词本</p>
-                            </div>
-                        `;
-                    }
-                } else {
-                    notepadList.innerHTML = `
-                        <div style="padding: 15px; color: #c62828; text-align: center;">
-                            ❌ ${data.error || '查询失败'}
+                if (response.ok && data.notepads && data.notepads.length > 0) {
+                    notepadList.innerHTML = data.notepads.map(notepad => `
+                        <div onclick="selectNotepad('${jobId}', '${notepad.id}', '${escapeHtml(notepad.title || '未命名词本')}')" class="p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors">
+                            <div class="font-semibold text-gray-800">${escapeHtml(notepad.title || '未命名词本')}</div>
+                            <div class="text-xs text-gray-500">${notepad.brief ? escapeHtml(notepad.brief) : 'ID: ' + notepad.id}</div>
                         </div>
-                    `;
+                    `).join('');
+                } else {
+                    notepadList.innerHTML = `<div class="p-5 text-center text-gray-400"><p>📭 您还没有创建云词本</p><p class="text-xs mt-1">请在墨墨 APP 中创建云词本</p></div>`;
                 }
             } catch (error) {
-                console.error('查询云词本错误:', error);
-                notepadList.innerHTML = `
-                    <div style="padding: 15px; color: #c62828; text-align: center;">
-                        ❌ 查询失败: ${error.message}
-                    </div>
-                `;
+                notepadList.innerHTML = `<div class="p-4 text-center text-red-800">❌ 查询失败: ${error.message}</div>`;
             }
         }
 
-        // 选择云词本
         function selectNotepad(jobId, notepadId, notepadName) {
             const input = document.getElementById(`notepadId-${jobId}`);
-            if (input) {
-                input.value = notepadId;
-            }
+            if (input) input.value = notepadId;
 
             const notepadList = document.getElementById(`notepadList-${jobId}`);
-            if (notepadList) {
-                notepadList.classList.remove('show');
-            }
+            if (notepadList) notepadList.classList.add('hidden');
 
-            // 提示用户
             console.log(`已选择云词本: ${notepadName} (ID: ${notepadId})`);
         }
 
@@ -1016,12 +562,10 @@
             const token = document.getElementById(`token-${jobId}`).value.trim();
             const notepadId = document.getElementById(`notepadId-${jobId}`).value.trim();
 
-            // 验证输入
             if (!token) {
                 alert('请输入墨墨 API Token');
                 return;
             }
-
             if (!notepadId) {
                 alert('请输入云词本 ID');
                 return;
@@ -1033,37 +577,31 @@
                 return;
             }
 
-            if (confirm(`确定要将 ${job.vocabulary.length} 个单词同步到墨墨背单词吗？`)) {
-                try {
-                    const response = await fetch(`/api/jobs/${jobId}/sync-to-maimemo`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            token: token,
-                            notepad_id: notepadId
-                        })
-                    });
+            if (!confirm(`确定要将 ${job.vocabulary.length} 个单词同步到墨墨背单词吗？`)) return;
 
-                    const data = await response.json();
+            try {
+                const response = await fetch(`/api/jobs/${jobId}/sync-to-maimemo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token, notepad_id: notepadId })
+                });
 
-                    if (response.ok) {
-                        alert(`✅ ${data.message}\n\n已成功同步 ${data.count} 个单词到墨墨背单词！`);
-                        hideMaimemoForm(jobId);
-                    } else {
-                        alert(`❌ 同步失败: ${data.error}`);
-                    }
-                } catch (error) {
-                    console.error('同步错误:', error);
-                    alert(`❌ 同步失败: ${error.message}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ ${data.message}\n\n已成功同步 ${data.count} 个单词到墨墨背单词！`);
+                    saveMaimemoConfig(token, notepadId);
+                    hideMaimemoForm(jobId);
+                } else {
+                    alert(`❌ 同步失败: ${data.error}`);
                 }
+            } catch (error) {
+                alert(`❌ 同步失败: ${error.message}`);
             }
         }
 
-        // ========== 页面加载时初始化 ==========
+        // ========== 初始化 ==========
         window.addEventListener('load', async () => {
-            // 加载已有任务列表
             try {
                 const response = await fetch('/api/jobs');
                 const data = await response.json();
@@ -1081,7 +619,6 @@
             }
         });
 
-        // 页面卸载时停止轮询
         window.addEventListener('beforeunload', stopPolling);
     </script>
 </body>

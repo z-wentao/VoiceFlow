@@ -136,6 +136,27 @@ func (rs *RedisJobStore) List() ([]*models.TranscriptionJob, error) {
 	return jobs, nil
 }
 
+// Delete 删除任务
+func (rs *RedisJobStore) Delete(jobID string) error {
+	key := rs.getKey(jobID)
+	indexKey := "voiceflow:jobs:index"
+
+	// 1. 删除任务数据
+	deleted, err := rs.client.Del(rs.ctx, key).Result()
+	if err != nil {
+		return fmt.Errorf("删除任务失败: %w", err)
+	}
+
+	if deleted == 0 {
+		return fmt.Errorf("任务不存在: %s", jobID)
+	}
+
+	// 2. 从索引中删除
+	rs.client.ZRem(rs.ctx, indexKey, jobID)
+
+	return nil
+}
+
 // Close 关闭 Redis 连接
 func (rs *RedisJobStore) Close() error {
 	return rs.client.Close()

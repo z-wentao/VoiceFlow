@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/z-wentao/voiceflow/pkg/config"
-	"github.com/z-wentao/voiceflow/pkg/maimemo"
+	"github.com/z-wentao/voiceflow/pkg/maimemo_service"
 	"github.com/z-wentao/voiceflow/pkg/models"
 	"github.com/z-wentao/voiceflow/pkg/queue"
 	"github.com/z-wentao/voiceflow/pkg/storage"
@@ -25,12 +25,13 @@ import (
 
 // App 应用上下文（面试亮点：依赖注入）
 type App struct {
-	config    *config.Config
-	queue     queue.Queue
-	store     storage.Store // 改为接口类型，支持多种存储实现
-	workers   []*worker.Worker
-	engine    *transcriber.TranscriptionEngine
-	extractor *vocabulary.Extractor
+	config         *config.Config
+	queue          queue.Queue
+	store          storage.Store // 改为接口类型，支持多种存储实现
+	workers        []*worker.Worker
+	engine         *transcriber.TranscriptionEngine
+	extractor      *vocabulary.Extractor
+	maimemoService *maimemo_service.Client // Maimemo 微服务客户端
 }
 
 func main() {
@@ -68,6 +69,60 @@ func main() {
 			log.Fatalf("❌ 初始化 Redis 存储失败: %v", err)
 		}
 		log.Printf("✓ 使用 Redis 存储 (地址: %s, TTL: %d 小时)", cfg.Storage.Redis.Addr, cfg.Storage.Redis.TTL)
+	case "postgres":
+		// 构建 PostgreSQL 连接字符串
+		connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Storage.Postgres.Host,
+			cfg.Storage.Postgres.Port,
+			cfg.Storage.Postgres.User,
+			cfg.Storage.Postgres.Password,
+			cfg.Storage.Postgres.Database,
+			cfg.Storage.Postgres.SSLMode,
+		)
+		app.store, err = storage.NewPostgresJobStore(connStr)
+		if err != nil {
+			log.Fatalf("❌ 初始化 PostgreSQL 存储失败: %v", err)
+		}
+		log.Printf("✓ 使用 PostgreSQL 存储 (数据库: %s@%s:%d/%s)",
+			cfg.Storage.Postgres.User,
+			cfg.Storage.Postgres.Host,
+			cfg.Storage.Postgres.Port,
+			cfg.Storage.Postgres.Database,
+		)
+	case "hybrid":
+		// 初始化 Redis 存储（热数据）
+		ttl := time.Duration(cfg.Storage.Redis.TTL) * time.Hour
+		redisStore, err := storage.NewRedisJobStore(
+			cfg.Storage.Redis.Addr,
+			cfg.Storage.Redis.Password,
+			cfg.Storage.Redis.DB,
+			ttl,
+		)
+		if err != nil {
+			log.Fatalf("❌ 初始化 Redis 存储失败: %v", err)
+		}
+
+		// 初始化 PostgreSQL 存储（冷数据）
+		connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Storage.Postgres.Host,
+			cfg.Storage.Postgres.Port,
+			cfg.Storage.Postgres.User,
+			cfg.Storage.Postgres.Password,
+			cfg.Storage.Postgres.Database,
+			cfg.Storage.Postgres.SSLMode,
+		)
+		dbStore, err := storage.NewPostgresJobStore(connStr)
+		if err != nil {
+			log.Fatalf("❌ 初始化 PostgreSQL 存储失败: %v", err)
+		}
+
+		// 创建混合存储
+		app.store = storage.NewHybridJobStore(redisStore, dbStore)
+		log.Printf("✓ 使用混合存储 (Redis: %s + PostgreSQL: %s/%s)",
+			cfg.Storage.Redis.Addr,
+			cfg.Storage.Postgres.Host,
+			cfg.Storage.Postgres.Database,
+		)
 	default:
 		log.Fatalf("❌ 不支持的存储类型: %s", cfg.Storage.Type)
 	}
@@ -97,6 +152,10 @@ func main() {
 	app.extractor = vocabulary.NewExtractor(cfg.OpenAI.APIKey)
 	log.Println("✓ 单词提取器初始化成功")
 
+	// 10. 初始化 Maimemo 微服务客户端
+	app.maimemoService = maimemo_service.NewClient(cfg.MaimemoService.URL)
+	log.Printf("✓ Maimemo 微服务客户端初始化成功 (地址: %s)", cfg.MaimemoService.URL)
+
 	// 11. 启动 Worker 池
 	workerPoolSize := cfg.Transcriber.WorkerPoolSize
 	app.workers = make([]*worker.Worker, workerPoolSize)
@@ -118,6 +177,7 @@ func main() {
 	log.Printf("   - 音频分片时长: %d 秒", cfg.Transcriber.SegmentDuration)
 	log.Printf("   - 队列类型: %s", cfg.Queue.Type)
 	log.Printf("   - 存储类型: %s", cfg.Storage.Type)
+	log.Printf("   - Maimemo 微服务: %s", cfg.MaimemoService.URL)
 
 	// 13. 优雅关闭（面试亮点）
 	go func() {
@@ -151,14 +211,16 @@ func (app *App) setupRouter() *gin.Engine {
 
 	// 静态文件
 	r.StaticFile("/", "./web/index.html")
+	r.Static("/uploads", "./uploads")
 
 	// API 路由
 	api := r.Group("/api")
 	{
 		api.GET("/ping", app.handlePing)
 		api.POST("/upload", app.handleUpload)
-		api.GET("/jobs/:job_id", app.handleGetJob)                 // 获取任务状态
-		api.GET("/jobs", app.handleListJobs)                        // 列出所有任务
+		api.GET("/jobs/:job_id", app.handleGetJob)                                // 获取任务状态
+		api.GET("/jobs", app.handleListJobs)                                       // 列出所有任务
+		api.DELETE("/jobs/:job_id", app.handleDeleteJob)                           // 删除任务
 		api.POST("/jobs/:job_id/extract-vocabulary", app.handleExtractVocabulary) // 提取单词
 		api.POST("/jobs/:job_id/sync-to-maimemo", app.handleSyncToMaimemo)        // 同步到墨墨
 		api.POST("/maimemo/list-notepads", app.handleListNotepads)                // 查询云词本列表
@@ -294,6 +356,26 @@ func (app *App) handleListJobs(c *gin.Context) {
 	})
 }
 
+// handleDeleteJob 删除任务
+func (app *App) handleDeleteJob(c *gin.Context) {
+	jobID := c.Param("job_id")
+
+	// 1. 从存储中删除任务
+	if err := app.store.Delete(jobID); err != nil {
+		log.Printf("❌ 删除任务失败: %v", err)
+		c.JSON(404, gin.H{"error": "任务不存在或删除失败"})
+		return
+	}
+
+	log.Printf("✓ 任务已删除: %s", jobID)
+
+	// 2. 返回成功
+	c.JSON(200, gin.H{
+		"message": "删除成功",
+		"job_id":  jobID,
+	})
+}
+
 // handleExtractVocabulary 提取单词
 func (app *App) handleExtractVocabulary(c *gin.Context) {
 	jobID := c.Param("job_id")
@@ -359,7 +441,7 @@ type SyncToMaimemoRequest struct {
 	NotepadID string `json:"notepad_id" binding:"required"` // 云词本 ID
 }
 
-// handleSyncToMaimemo 同步到墨墨背单词
+// handleSyncToMaimemo 同步到墨墨背单词（通过 Maimemo 微服务）
 func (app *App) handleSyncToMaimemo(c *gin.Context) {
 	jobID := c.Param("job_id")
 
@@ -383,12 +465,9 @@ func (app *App) handleSyncToMaimemo(c *gin.Context) {
 		return
 	}
 
-	// 4. 创建墨墨客户端
-	client := maimemo.NewClient(req.Token)
-
-	// 5. 同步到墨墨云词本
+	// 4. 调用 Maimemo 微服务添加单词
 	log.Printf("开始同步到墨墨，任务 ID: %s, 单词数: %d", jobID, len(job.Vocabulary))
-	if err := client.AppendWordsToNotepad(c.Request.Context(), req.NotepadID, job.Vocabulary); err != nil {
+	if err := app.maimemoService.AddWordsToNotepad(c.Request.Context(), req.Token, req.NotepadID, job.Vocabulary); err != nil {
 		log.Printf("❌ 同步到墨墨失败: %v", err)
 		c.JSON(500, gin.H{"error": fmt.Sprintf("同步到墨墨失败: %v", err)})
 		return
@@ -396,7 +475,7 @@ func (app *App) handleSyncToMaimemo(c *gin.Context) {
 
 	log.Printf("✓ 成功同步 %d 个单词到墨墨", len(job.Vocabulary))
 
-	// 6. 返回结果
+	// 5. 返回结果
 	c.JSON(200, gin.H{
 		"message": "同步成功",
 		"count":   len(job.Vocabulary),
@@ -408,7 +487,7 @@ type ListNotepadsRequest struct {
 	Token string `json:"token" binding:"required"` // 墨墨 API Token
 }
 
-// handleListNotepads 查询用户的云词本列表
+// handleListNotepads 查询用户的云词本列表（通过 Maimemo 微服务）
 func (app *App) handleListNotepads(c *gin.Context) {
 	// 1. 解析请求
 	var req ListNotepadsRequest
@@ -417,12 +496,9 @@ func (app *App) handleListNotepads(c *gin.Context) {
 		return
 	}
 
-	// 2. 创建墨墨客户端
-	client := maimemo.NewClient(req.Token)
-
-	// 3. 获取云词本列表
+	// 2. 调用 Maimemo 微服务获取云词本列表
 	log.Printf("正在查询云词本列表...")
-	notepads, err := client.ListNotepads(c.Request.Context())
+	notepads, err := app.maimemoService.ListNotepads(c.Request.Context(), req.Token)
 	if err != nil {
 		log.Printf("❌ 查询云词本列表失败: %v", err)
 		c.JSON(500, gin.H{"error": fmt.Sprintf("查询失败: %v", err)})
@@ -431,7 +507,7 @@ func (app *App) handleListNotepads(c *gin.Context) {
 
 	log.Printf("✓ 成功查询到 %d 个云词本", len(notepads))
 
-	// 4. 返回结果
+	// 3. 返回结果
 	c.JSON(200, gin.H{
 		"notepads": notepads,
 		"count":    len(notepads),

@@ -9,11 +9,12 @@ import (
 
 // Config 应用配置
 type Config struct {
-	OpenAI      OpenAIConfig      `yaml:"openai"`
-	Transcriber TranscriberConfig `yaml:"transcriber"`
-	Queue       QueueConfig       `yaml:"queue"`
-	Storage     StorageConfig     `yaml:"storage"`
-	Server      ServerConfig      `yaml:"server"`
+	OpenAI         OpenAIConfig         `yaml:"openai"`
+	Transcriber    TranscriberConfig    `yaml:"transcriber"`
+	Queue          QueueConfig          `yaml:"queue"`
+	Storage        StorageConfig        `yaml:"storage"`
+	Server         ServerConfig         `yaml:"server"`
+	MaimemoService MaimemoServiceConfig `yaml:"maimemo_service"` // Maimemo 微服务配置
 }
 
 // OpenAIConfig OpenAI 配置
@@ -44,8 +45,9 @@ type RabbitMQConfig struct {
 
 // StorageConfig 存储配置
 type StorageConfig struct {
-	Type  string      `yaml:"type"`  // 存储类型: memory 或 redis
-	Redis RedisConfig `yaml:"redis"` // Redis 配置
+	Type     string         `yaml:"type"`     // 存储类型: memory/redis/postgres/hybrid
+	Redis    RedisConfig    `yaml:"redis"`    // Redis 配置
+	Postgres PostgresConfig `yaml:"postgres"` // PostgreSQL 配置
 }
 
 // RedisConfig Redis 配置
@@ -56,10 +58,26 @@ type RedisConfig struct {
 	TTL      int    `yaml:"ttl"`      // 数据过期时间（小时），默认 168（7天）
 }
 
+// PostgresConfig PostgreSQL 配置
+type PostgresConfig struct {
+	Host     string `yaml:"host"`     // 主机地址
+	Port     int    `yaml:"port"`     // 端口
+	User     string `yaml:"user"`     // 用户名
+	Password string `yaml:"password"` // 密码
+	Database string `yaml:"database"` // 数据库名
+	SSLMode  string `yaml:"sslmode"`  // SSL模式: disable/require/verify-ca/verify-full
+}
+
 // ServerConfig 服务器配置
 type ServerConfig struct {
 	Port          int   `yaml:"port"`
 	MaxUploadSize int64 `yaml:"max_upload_size"`
+}
+
+// MaimemoServiceConfig Maimemo 微服务配置
+type MaimemoServiceConfig struct {
+	URL     string `yaml:"url"`     // Maimemo 微服务地址
+	Timeout int    `yaml:"timeout"` // 超时时间（秒）
 }
 
 // LoadConfig 加载配置文件
@@ -111,13 +129,35 @@ func (c *Config) Validate() error {
 		c.Storage.Type = "memory"
 	}
 
-	if c.Storage.Type == "redis" {
+	// Redis 配置默认值
+	if c.Storage.Type == "redis" || c.Storage.Type == "hybrid" {
 		if c.Storage.Redis.Addr == "" {
 			c.Storage.Redis.Addr = "localhost:6379"
 		}
 		if c.Storage.Redis.TTL <= 0 {
 			c.Storage.Redis.TTL = 168 // 默认 7 天
 		}
+	}
+
+	// PostgreSQL 配置默认值
+	if c.Storage.Type == "postgres" || c.Storage.Type == "hybrid" {
+		if c.Storage.Postgres.Host == "" {
+			c.Storage.Postgres.Host = "localhost"
+		}
+		if c.Storage.Postgres.Port <= 0 {
+			c.Storage.Postgres.Port = 5432
+		}
+		if c.Storage.Postgres.SSLMode == "" {
+			c.Storage.Postgres.SSLMode = "disable"
+		}
+	}
+
+	// Maimemo 微服务配置默认值
+	if c.MaimemoService.URL == "" {
+		c.MaimemoService.URL = "http://localhost:8081"
+	}
+	if c.MaimemoService.Timeout <= 0 {
+		c.MaimemoService.Timeout = 30
 	}
 
 	return nil

@@ -17,6 +17,9 @@ type Store interface {
 	// List 列出所有任务
 	List() ([]*models.TranscriptionJob, error)
 
+	// Delete 删除任务
+	Delete(jobID string) error
+
 	// Close 关闭存储连接
 	Close() error
 }

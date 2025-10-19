@@ -70,6 +70,19 @@ func (js *JobStore) List() ([]*models.TranscriptionJob, error) {
 	return jobs, nil
 }
 
+// Delete 删除任务
+func (js *JobStore) Delete(jobID string) error {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+
+	if _, exists := js.jobs[jobID]; !exists {
+		return fmt.Errorf("任务不存在: %s", jobID)
+	}
+
+	delete(js.jobs, jobID)
+	return nil
+}
+
 // Close 关闭存储（内存存储无需关闭）
 func (js *JobStore) Close() error {
 	return nil

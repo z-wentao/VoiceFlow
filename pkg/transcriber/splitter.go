@@ -57,7 +57,10 @@ func (as *AudioSplitter) Split(audioPath string) ([]models.Segment, error) {
 	log.Printf("✂️  音频将被切分为 %d 个片段 (每片 %d 秒)", segmentCount, as.segmentDuration)
 
 	// 3. 创建临时目录存放片段
-	segmentsDir := filepath.Join(filepath.Dir(audioPath), "segments")
+	// BUG FIX: 为每个音频文件创建独立的 segments 子目录，避免并发任务时文件名冲突
+	audioFilename := filepath.Base(audioPath)
+	audioFilenameWithoutExt := strings.TrimSuffix(audioFilename, filepath.Ext(audioFilename))
+	segmentsDir := filepath.Join(filepath.Dir(audioPath), "segments_"+audioFilenameWithoutExt)
 	if err := os.MkdirAll(segmentsDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建片段目录失败: %v", err)
 	}
@@ -174,9 +177,10 @@ func (as *AudioSplitter) extractSegment(inputPath, outputPath string, startTime,
 func (as *AudioSplitter) Cleanup(segments []models.Segment) error {
 	if len(segments) > 0 {
 		segmentsDir := filepath.Dir(segments[0].FilePath)
-		// 只删除临时创建的 segments 目录，不删除 uploads 等原始目录
-		// 通过检查目录名是否为 "segments" 来判断
-		if filepath.Base(segmentsDir) == "segments" {
+		// 只删除临时创建的 segments_xxx 目录，不删除 uploads 等原始目录
+		// 通过检查目录名前缀是否为 "segments_" 来判断
+		dirBaseName := filepath.Base(segmentsDir)
+		if dirBaseName == "segments" || strings.HasPrefix(dirBaseName, "segments_") {
 			log.Printf("🧹 清理临时片段目录: %s", segmentsDir)
 			return os.RemoveAll(segmentsDir)
 		}
