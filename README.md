@@ -399,6 +399,3 @@ Goroutine Pool 并发转换
 MIT License
 
 ---
-
-**作者**: [Your Name]
-**项目地址**: https://github.com/z-wentao/voiceflow
