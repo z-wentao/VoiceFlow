@@ -4,6 +4,8 @@
 *.dll
 *.so
 *.dylib
+voiceflow
+voiceflow-new
 .voiceflow
 # Go build artifacts
 *.test
@@ -47,6 +49,3 @@ config/config.yaml
 # Test coverage
 *.cover
 coverage.html
-
-# Go modules cache
-go.sum
