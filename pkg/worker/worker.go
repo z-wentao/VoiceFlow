@@ -116,6 +116,13 @@ func (w *Worker) processJob(job *models.TranscriptionJob) {
 			j.Error = err.Error()
 			j.CompletedAt = time.Now()
 		})
+
+		// RabbitMQ: 拒绝消息并重新入队（最多重试 3 次）
+		if rabbitMQQueue, ok := w.queue.(*queue.RabbitMQQueue); ok {
+			// TODO: 可以在这里实现重试计数逻辑
+			// 暂时先不重新入队，避免无限重试
+			rabbitMQQueue.Nack(job, false)
+		}
 		return
 	}
 
@@ -132,4 +139,11 @@ func (w *Worker) processJob(job *models.TranscriptionJob) {
 		j.Progress = 100
 		j.CompletedAt = time.Now()
 	})
+
+	// RabbitMQ: 确认消息（任务成功完成）
+	if rabbitMQQueue, ok := w.queue.(*queue.RabbitMQQueue); ok {
+		if err := rabbitMQQueue.Ack(job); err != nil {
+			log.Printf("[Worker-%d] ⚠️  确认 RabbitMQ 消息失败: %v", w.id, err)
+		}
+	}
 }

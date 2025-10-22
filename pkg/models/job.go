@@ -34,6 +34,10 @@ type TranscriptionJob struct {
 	VocabDetail []WordDetail `json:"vocab_detail"`  // 单词详细信息
 	CreatedAt   time.Time    `json:"created_at"`    // 创建时间
 	CompletedAt time.Time    `json:"completed_at"`  // 完成时间
+
+	// RabbitMQ 相关（不序列化到 JSON）
+	DeliveryTag      uint64      `json:"-"` // RabbitMQ delivery tag
+	RabbitMQDelivery interface{} `json:"-"` // RabbitMQ delivery 对象（用于 Ack/Nack）
 }
 
 // Segment 音频片段

@@ -152,6 +152,24 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// 队列配置默认值
+	if c.Queue.Type == "" {
+		c.Queue.Type = "memory"
+	}
+	if c.Queue.BufferSize <= 0 {
+		c.Queue.BufferSize = 100
+	}
+
+	// RabbitMQ 配置验证
+	if c.Queue.Type == "rabbitmq" {
+		if c.Queue.RabbitMQ.URL == "" {
+			c.Queue.RabbitMQ.URL = "amqp://guest:guest@localhost:5672/"
+		}
+		if c.Queue.RabbitMQ.QueueName == "" {
+			c.Queue.RabbitMQ.QueueName = "voiceflow_transcription"
+		}
+	}
+
 	// Maimemo 微服务配置默认值
 	if c.MaimemoService.URL == "" {
 		c.MaimemoService.URL = "http://localhost:8081"

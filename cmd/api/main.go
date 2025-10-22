@@ -133,9 +133,14 @@ func main() {
 		app.queue = queue.NewMemoryQueue(cfg.Queue.BufferSize)
 		log.Println("✓ 使用内存队列")
 	case "rabbitmq":
-		// TODO: 未来实现 RabbitMQ
-		log.Println("⚠️  RabbitMQ 尚未实现，使用内存队列")
-		app.queue = queue.NewMemoryQueue(cfg.Queue.BufferSize)
+		app.queue, err = queue.NewRabbitMQQueue(
+			cfg.Queue.RabbitMQ.URL,
+			cfg.Queue.RabbitMQ.QueueName,
+		)
+		if err != nil {
+			log.Fatalf("❌ 初始化 RabbitMQ 队列失败: %v", err)
+		}
+		log.Printf("✓ 使用 RabbitMQ 队列 (队列名: %s)", cfg.Queue.RabbitMQ.QueueName)
 	default:
 		log.Fatalf("❌ 不支持的队列类型: %s", cfg.Queue.Type)
 	}
