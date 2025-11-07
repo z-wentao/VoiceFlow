@@ -41,9 +41,9 @@
             >
                 <p class="text-6xl mb-4">📁</p>
                 <p class="text-lg font-semibold text-gray-800 mb-2">点击或拖拽上传音频/视频文件</p>
-                <p class="text-sm text-gray-500">支持 MP3, MP4, WAV, M4A, FLAC, AAC 等格式 · 最大 300MB</p>
+                <p class="text-sm text-gray-500">支持 MP4, WEBM, MOV, MP3, WAV, M4A, FLAC, AAC 等格式 · 最大 300MB</p>
                 <p class="text-xs text-gray-400 mt-2">💡 支持多文件同时上传</p>
-                <input type="file" id="fileInput" class="hidden" accept="audio/*,video/mp4,video/webm" multiple onchange="handleFileSelect(event)">
+                <input type="file" id="fileInput" class="hidden" accept="video/*,audio/*,.mp4,.webm,.mov,.avi,.mkv,.mp3,.wav,.m4a,.flac,.aac" multiple onchange="handleFileSelect(event)">
             </div>
         </div>
 
@@ -320,7 +320,7 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-2" onclick="event.stopPropagation()">
-                            <button onclick="toggleAudioPlayer('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">🎵 播放</button>
+                            <button onclick="toggleAudioPlayer('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">${getMediaIcon(job.filename)} 播放</button>
                             ${job.status === 'completed' ? `
                                 <button onclick="downloadResult('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">📥 下载</button>
                                 <button onclick="extractVocabulary('${job.job_id}')" class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors">📚 提取单词</button>
@@ -331,12 +331,10 @@
                     </div>
 
                     <div class="task-details mt-5 pt-5 border-t border-gray-200 ${isExpanded ? '' : 'hidden'}">
-                        <!-- 音频播放器 -->
+                        <!-- 媒体播放器 -->
                         <div id="audioPlayer-${job.job_id}" class="hidden mb-5">
-                            <h4 class="font-semibold text-gray-800 mb-2">🎵 音频播放</h4>
-                            <audio controls class="w-full" src="/${job.file_path}">
-                                您的浏览器不支持音频播放
-                            </audio>
+                            <h4 class="font-semibold text-gray-800 mb-2">${getMediaIcon(job.filename)} ${getMediaLabel(job.filename)}</h4>
+                            ${renderMediaPlayer(job.filename, job.file_path)}
                         </div>
 
                         ${(job.status === 'processing' || job.status === 'completed') && job.progress > 0 ? `
@@ -465,6 +463,49 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // ========== 媒体文件类型检测 ==========
+        function isVideoFile(filename) {
+            const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v'];
+            const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+            return videoExtensions.includes(ext);
+        }
+
+        function isAudioFile(filename) {
+            const audioExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg'];
+            const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+            return audioExtensions.includes(ext);
+        }
+
+        function getMediaIcon(filename) {
+            if (isVideoFile(filename)) {
+                return '🎬';
+            } else if (isAudioFile(filename)) {
+                return '🎵';
+            } else {
+                return '📄';
+            }
+        }
+
+        function getMediaLabel(filename) {
+            if (isVideoFile(filename)) {
+                return '视频播放';
+            } else if (isAudioFile(filename)) {
+                return '音频播放';
+            } else {
+                return '媒体播放';
+            }
+        }
+
+        function renderMediaPlayer(filename, filePath) {
+            if (isVideoFile(filename)) {
+                return `<video controls class="w-full max-h-96" src="/${filePath}">您的浏览器不支持视频播放</video>`;
+            } else if (isAudioFile(filename)) {
+                return `<audio controls class="w-full" src="/${filePath}">您的浏览器不支持音频播放</audio>`;
+            } else {
+                return `<div class="text-gray-500 p-4 border border-gray-300 rounded">不支持的媒体格式</div>`;
+            }
         }
 
         // ========== 单词提取 ==========
