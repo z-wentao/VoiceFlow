@@ -75,13 +75,13 @@ func RenderTaskCard(job *models.TranscriptionJob) template.HTML {
 
     if job.Status == "completed" {
 	actions += fmt.Sprintf(`
-	    <button hx-get="/api/jobs/%s/download">📥 下载文本</button>
+	    <a href="/api/jobs/%s/download" style="display: inline-block; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; cursor: pointer;">📥 下载文本</a>
 	    `, job.JobID)
 
 	// 如果有字幕文件，显示下载字幕按钮
 	if job.SubtitlePath != "" {
 	    actions += fmt.Sprintf(`
-		<button hx-get="/api/jobs/%s/download-subtitle">🎬 下载字幕</button>
+		<a href="/api/jobs/%s/download-subtitle" style="display: inline-block; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; cursor: pointer;">🎬 下载字幕</a>
 		`, job.JobID)
 	}
 
