@@ -47,14 +47,19 @@ func (s *PostgresJobStore) Save(job *models.TranscriptionJob) error {
     query := `
     INSERT INTO transcription_jobs (
     job_id, filename, file_path, status, progress,
-    result, language, duration, error,
+    result, subtitle_path, vtt_path, bilingual_srt_path, bilingual_vtt_path,
+    language, duration, error,
     vocabulary, vocab_detail, created_at, completed_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     ON CONFLICT (job_id)
     DO UPDATE SET
     status = EXCLUDED.status,
     progress = EXCLUDED.progress,
     result = EXCLUDED.result,
+    subtitle_path = EXCLUDED.subtitle_path,
+    vtt_path = EXCLUDED.vtt_path,
+    bilingual_srt_path = EXCLUDED.bilingual_srt_path,
+    bilingual_vtt_path = EXCLUDED.bilingual_vtt_path,
     language = EXCLUDED.language,
     duration = EXCLUDED.duration,
     error = EXCLUDED.error,
@@ -70,6 +75,10 @@ func (s *PostgresJobStore) Save(job *models.TranscriptionJob) error {
 	job.Status,
 	job.Progress,
 	job.Result,
+	job.SubtitlePath,
+	job.VTTPath,
+	job.BilingualSRTPath,
+	job.BilingualVTTPath,
 	job.Language,
 	job.Duration,
 	job.Error,
@@ -90,7 +99,8 @@ func (s *PostgresJobStore) Save(job *models.TranscriptionJob) error {
 func (s *PostgresJobStore) Get(jobID string) (*models.TranscriptionJob, error) {
     query := `
     SELECT job_id, filename, file_path, status, progress,
-    result, language, duration, error,
+    result, subtitle_path, vtt_path, bilingual_srt_path, bilingual_vtt_path,
+    language, duration, error,
     vocabulary, vocab_detail, created_at, completed_at
     FROM transcription_jobs
     WHERE job_id = $1
@@ -98,7 +108,7 @@ func (s *PostgresJobStore) Get(jobID string) (*models.TranscriptionJob, error) {
 
     var job models.TranscriptionJob
     var vocabularyJSON, vocabDetailJSON []byte
-    var result, language, errorMsg sql.NullString
+    var result, subtitlePath, vttPath, bilingualSRTPath, bilingualVTTPath, language, errorMsg sql.NullString
     var filePath sql.NullString
     var duration sql.NullFloat64
     var completedAt sql.NullTime
@@ -110,6 +120,10 @@ func (s *PostgresJobStore) Get(jobID string) (*models.TranscriptionJob, error) {
 	&job.Status,
 	&job.Progress,
 	&result,
+	&subtitlePath,
+	&vttPath,
+	&bilingualSRTPath,
+	&bilingualVTTPath,
 	&language,
 	&duration,
 	&errorMsg,
@@ -132,6 +146,18 @@ func (s *PostgresJobStore) Get(jobID string) (*models.TranscriptionJob, error) {
     }
     if result.Valid {
 	job.Result = result.String
+    }
+    if subtitlePath.Valid {
+	job.SubtitlePath = subtitlePath.String
+    }
+    if vttPath.Valid {
+	job.VTTPath = vttPath.String
+    }
+    if bilingualSRTPath.Valid {
+	job.BilingualSRTPath = bilingualSRTPath.String
+    }
+    if bilingualVTTPath.Valid {
+	job.BilingualVTTPath = bilingualVTTPath.String
     }
     if language.Valid {
 	job.Language = language.String
@@ -176,7 +202,8 @@ func (s *PostgresJobStore) Update(jobID string, updateFn func(*models.Transcript
 func (s *PostgresJobStore) List() ([]*models.TranscriptionJob, error) {
     query := `
     SELECT job_id, filename, file_path, status, progress,
-    result, language, duration, error,
+    result, subtitle_path, vtt_path, bilingual_srt_path, bilingual_vtt_path,
+    language, duration, error,
     vocabulary, vocab_detail, created_at, completed_at
     FROM transcription_jobs
     ORDER BY created_at DESC
@@ -194,7 +221,7 @@ func (s *PostgresJobStore) List() ([]*models.TranscriptionJob, error) {
     for rows.Next() {
 	var job models.TranscriptionJob
 	var vocabularyJSON, vocabDetailJSON []byte
-	var result, language, errorMsg sql.NullString
+	var result, subtitlePath, vttPath, bilingualSRTPath, bilingualVTTPath, language, errorMsg sql.NullString
 	var filePath sql.NullString
 	var duration sql.NullFloat64
 	var completedAt sql.NullTime
@@ -206,6 +233,10 @@ func (s *PostgresJobStore) List() ([]*models.TranscriptionJob, error) {
 	    &job.Status,
 	    &job.Progress,
 	    &result,
+	    &subtitlePath,
+	    &vttPath,
+	    &bilingualSRTPath,
+	    &bilingualVTTPath,
 	    &language,
 	    &duration,
 	    &errorMsg,
@@ -225,6 +256,18 @@ func (s *PostgresJobStore) List() ([]*models.TranscriptionJob, error) {
 	}
 	if result.Valid {
 	    job.Result = result.String
+	}
+	if subtitlePath.Valid {
+	    job.SubtitlePath = subtitlePath.String
+	}
+	if vttPath.Valid {
+	    job.VTTPath = vttPath.String
+	}
+	if bilingualSRTPath.Valid {
+	    job.BilingualSRTPath = bilingualSRTPath.String
+	}
+	if bilingualVTTPath.Valid {
+	    job.BilingualVTTPath = bilingualVTTPath.String
 	}
 	if language.Valid {
 	    job.Language = language.String
@@ -251,6 +294,10 @@ func (s *PostgresJobStore) List() ([]*models.TranscriptionJob, error) {
     }
 
     return jobs, nil
+}
+
+func (s *PostgresJobStore) ListAll() ([]*models.TranscriptionJob, error) {
+    return s.List()
 }
 
 // Delete 删除任务

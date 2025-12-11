@@ -4,6 +4,7 @@ import (
     "context"
     "fmt"
     "log"
+    "path/filepath"
     "sort"
     "strings"
     "sync"
@@ -34,12 +35,18 @@ func NewTranscriptionEngine(apiKey string, segmentConcurrency int, segmentDurati
 // ProcessResult 处理结果（内部用于 Channel 传递）
 type ProcessResult struct {
     SegmentIndex int
-    Text         string
+    Response     *WhisperResponse // 完整的 Whisper 响应（包含时间戳）
     Error        error
 }
 
-// Transcribe 转换整个音频文件
-// 面试亮点：
+// TranscriptionResult 转录结果
+type TranscriptionResult struct {
+    Text         string // 纯文本结果
+    SubtitlePath string // SRT 字幕文件路径
+    VTTPath      string // WebVTT 字幕文件路径（用于网页播放）
+}
+
+// Transcribe 转换整个音频文件（返回文本和字幕）
 // 1. 使用 Context 控制超时和取消
 // 2. Goroutine Pool 控制并发数
 // 3. Channel 收集结果
@@ -50,12 +57,12 @@ func (te *TranscriptionEngine) Transcribe(
     audioPath string,
     language string,
     progressCallback func(progress int),
-) (string, error) {
+) (*TranscriptionResult, error) {
     // split the video or audio
     log.Printf("开始分片音频: %s", audioPath)
     segments, err := te.splitter.Split(audioPath)
     if err != nil {
-	return "", fmt.Errorf("分片失败: %v", err)
+	return nil, fmt.Errorf("分片失败: %v", err)
     }
     defer te.splitter.Cleanup(segments)
 
@@ -87,7 +94,7 @@ func (te *TranscriptionEngine) Transcribe(
     }()
 
     // 6. 收集结果
-    results := make(map[int]string)
+    results := make(map[int]*WhisperResponse)
     var errors []error
     completedCount := 0
 
@@ -98,10 +105,10 @@ func (te *TranscriptionEngine) Transcribe(
 	    errors = append(errors, fmt.Errorf("片段 %d 失败: %v", result.SegmentIndex, result.Error))
 	    log.Printf("❌ 片段 #%d 转换失败: %v", result.SegmentIndex, result.Error)
 	} else {
-	    results[result.SegmentIndex] = result.Text
+	    results[result.SegmentIndex] = result.Response
 	    log.Printf("✅ 片段 #%d 转换完成 | 进度: %d/%d (%.1f%%) | 文本长度: %d 字符",
 		result.SegmentIndex, completedCount, totalSegments,
-		float64(completedCount*100)/float64(totalSegments), len(result.Text))
+		float64(completedCount*100)/float64(totalSegments), len(result.Response.Text))
 	}
 
 	// 进度回调
@@ -113,14 +120,33 @@ func (te *TranscriptionEngine) Transcribe(
 
     // 7. 检查是否有错误
     if len(errors) > 0 {
-	return "", fmt.Errorf("转换过程中出现 %d 个错误: %v", len(errors), errors[0])
+	return nil, fmt.Errorf("转换过程中出现 %d 个错误: %v", len(errors), errors[0])
     }
 
-    // 8. 按顺序合并结果
-    finalText := te.mergeResults(results, totalSegments)
-
+    // 8. 按顺序合并文本结果
+    finalText := te.mergeTextResults(results, totalSegments)
     log.Printf("✓ 所有片段转换完成，总长度: %d 字符", len(finalText))
-    return finalText, nil
+
+    // 9. 生成字幕文件（SRT 和 VTT）
+    srtPath, vttPath, err := te.generateSubtitleFiles(segments, results, audioPath)
+    if err != nil {
+	log.Printf("⚠️ 生成字幕文件失败: %v", err)
+	// 不影响主流程，继续返回文本结果
+	return &TranscriptionResult{
+	    Text:         finalText,
+	    SubtitlePath: "",
+	    VTTPath:      "",
+	}, nil
+    }
+
+    log.Printf("✓ 字幕文件已生成:")
+    log.Printf("  - SRT: %s", srtPath)
+    log.Printf("  - VTT: %s", vttPath)
+    return &TranscriptionResult{
+	Text:         finalText,
+	SubtitlePath: srtPath,
+	VTTPath:      vttPath,
+    }, nil
 }
 
 // segmentProcessor 分片处理器 - Goroutine Pool 中的工作单元
@@ -152,12 +178,12 @@ func (te *TranscriptionEngine) segmentProcessor(
 	// 转换音频片段（带重试）
 	log.Printf("🔄 [分片处理器-%d] 正在处理片段 #%d (%.1fs - %.1fs)",
 	    processorID, segment.Index, segment.Start, segment.End)
-	text, err := te.whisperClient.TranscribeWithRetry(ctx, segment.FilePath, language, 3)
+	response, err := te.whisperClient.TranscribeWithRetry(ctx, segment.FilePath, language, 3)
 
 	// 发送结果
 	resultChan <- ProcessResult{
 	    SegmentIndex: segment.Index,
-	    Text:         text,
+	    Response:     response,
 	    Error:        err,
 	}
     }
@@ -165,8 +191,8 @@ func (te *TranscriptionEngine) segmentProcessor(
     log.Printf("分片处理器 #%d 结束", processorID)
 }
 
-// mergeResults 按顺序合并所有片段的结果
-func (te *TranscriptionEngine) mergeResults(results map[int]string, totalSegments int) string {
+// mergeTextResults 按顺序合并所有片段的文本结果
+func (te *TranscriptionEngine) mergeTextResults(results map[int]*WhisperResponse, totalSegments int) string {
     // 按索引排序
     indices := make([]int, 0, len(results))
     for idx := range results {
@@ -180,8 +206,45 @@ func (te *TranscriptionEngine) mergeResults(results map[int]string, totalSegment
 	if idx > 0 {
 	    builder.WriteString(" ") // 片段之间添加空格
 	}
-	builder.WriteString(results[idx])
+	if resp := results[idx]; resp != nil {
+	    builder.WriteString(resp.Text)
+	}
     }
 
     return builder.String()
+}
+
+// generateSubtitleFiles 生成字幕文件（SRT 和 VTT）
+func (te *TranscriptionEngine) generateSubtitleFiles(
+    segments []models.Segment,
+    results map[int]*WhisperResponse,
+    audioPath string,
+) (string, string, error) {
+    // 准备 SegmentResult 数据
+    segmentResults := make([]SegmentResult, 0, len(segments))
+    for _, seg := range segments {
+	if resp, ok := results[seg.Index]; ok {
+	    segmentResults = append(segmentResults, SegmentResult{
+		Segment:  seg,
+		Response: resp,
+	    })
+	}
+    }
+
+    // 确定输出路径（与音频文件同目录）
+    basePath := strings.TrimSuffix(audioPath, filepath.Ext(audioPath))
+    srtPath := basePath + ".srt"
+    vttPath := basePath + ".vtt"
+
+    // 生成 SRT 文件
+    if err := GenerateSRT(segmentResults, srtPath); err != nil {
+	return "", "", fmt.Errorf("生成 SRT 失败: %w", err)
+    }
+
+    // 生成 VTT 文件
+    if err := GenerateVTT(segmentResults, vttPath); err != nil {
+	return "", "", fmt.Errorf("生成 VTT 失败: %w", err)
+    }
+
+    return srtPath, vttPath, nil
 }

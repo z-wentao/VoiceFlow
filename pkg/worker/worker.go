@@ -14,9 +14,9 @@ import (
 
 // Worker 任务处理器
 type Worker struct {
-    id     int    
+    id     int
     queue  queue.Queue
-    store  storage.Store 
+    store  storage.Store
     engine *transcriber.TranscriptionEngine
     ctx    context.Context
     cancel context.CancelFunc
@@ -126,12 +126,19 @@ func (w *Worker) processJob(job *models.TranscriptionJob) {
     duration := time.Since(startTime)
     log.Printf("[Worker-%d] 🎉 任务 %s 完成！", w.id, job.JobID)
     log.Printf("[Worker-%d] ⏱️  总耗时: %.2f 秒 (%.2f 分钟)", w.id, duration.Seconds(), duration.Minutes())
-    log.Printf("[Worker-%d] 📝 转换结果长度: %d 字符", w.id, len(result))
+    log.Printf("[Worker-%d] 📝 转换结果长度: %d 字符", w.id, len(result.Text))
+    if result.SubtitlePath != "" {
+	log.Printf("[Worker-%d] 🎬 字幕文件:", w.id)
+	log.Printf("[Worker-%d]    - SRT: %s", w.id, result.SubtitlePath)
+	log.Printf("[Worker-%d]    - VTT: %s", w.id, result.VTTPath)
+    }
     log.Printf(strings.Repeat("=", 80) + "\n")
 
     w.store.Update(job.JobID, func(j *models.TranscriptionJob) {
 	j.Status = models.StatusCompleted
-	j.Result = result
+	j.Result = result.Text
+	j.SubtitlePath = result.SubtitlePath
+	j.VTTPath = result.VTTPath
 	j.Progress = 100
 	j.CompletedAt = time.Now()
     })

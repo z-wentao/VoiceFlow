@@ -1,25 +1,25 @@
 package transcriber
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "io"
+    "mime/multipart"
+    "net/http"
+    "os"
+    "path/filepath"
+    "time"
 )
 
 const (
-	whisperAPIURL = "https://api.openai.com/v1/audio/transcriptions"
+    whisperAPIURL = "https://api.openai.com/v1/audio/transcriptions"
 )
 
 // WhisperClient OpenAI Whisper API 客户端
 type WhisperClient struct {
-	apiKey     string
+    apiKey     string
     httpClient *http.Client
 }
 
@@ -33,19 +33,28 @@ func NewWhisperClient(apiKey string) *WhisperClient {
     }
 }
 
-// WhisperResponse API 响应
+// WhisperResponse API 响应（verbose_json 格式）
 type WhisperResponse struct {
-    Text     string `json:"text"`
-    Language string `json:"language"`
+    Text     string           `json:"text"`
+    Language string           `json:"language"`
+    Segments []WhisperSegment `json:"segments"` // 时间戳片段信息
 }
 
-// Transcribe 转换音频为文字
+// WhisperSegment Whisper 返回的时间戳片段
+type WhisperSegment struct {
+    ID    int     `json:"id"`
+    Start float64 `json:"start"` // 开始时间（秒）
+    End   float64 `json:"end"`   // 结束时间（秒）
+    Text  string  `json:"text"`  // 片段文本
+}
+
+// Transcribe 转换音频为文字（返回完整响应，包含时间戳）
 // 支持 Context 超时控制（面试亮点）
-func (wc *WhisperClient) Transcribe(ctx context.Context, audioPath string, language string) (string, error) {
+func (wc *WhisperClient) Transcribe(ctx context.Context, audioPath string, language string) (*WhisperResponse, error) {
     // 1. 打开音频文件
     file, err := os.Open(audioPath)
     if err != nil {
-	return "", fmt.Errorf("打开文件失败: %v", err)
+	return nil, fmt.Errorf("打开文件失败: %v", err)
     }
     defer file.Close()
 
@@ -56,10 +65,10 @@ func (wc *WhisperClient) Transcribe(ctx context.Context, audioPath string, langu
     // 添加文件
     part, err := writer.CreateFormFile("file", filepath.Base(audioPath))
     if err != nil {
-	return "", fmt.Errorf("创建表单失败: %v", err)
+	return nil, fmt.Errorf("创建表单失败: %v", err)
     }
     if _, err := io.Copy(part, file); err != nil {
-	return "", fmt.Errorf("复制文件失败: %v", err)
+	return nil, fmt.Errorf("复制文件失败: %v", err)
     }
 
     // 添加模型参数
@@ -70,17 +79,17 @@ func (wc *WhisperClient) Transcribe(ctx context.Context, audioPath string, langu
 	writer.WriteField("language", language)
     }
 
-    // 添加响应格式
-    writer.WriteField("response_format", "json")
+    // 添加响应格式（使用 verbose_json 获取时间戳信息）
+    writer.WriteField("response_format", "verbose_json")
 
     if err := writer.Close(); err != nil {
-	return "", fmt.Errorf("关闭表单失败: %v", err)
+	return nil, fmt.Errorf("关闭表单失败: %v", err)
     }
 
     // 3. 创建 HTTP 请求
     req, err := http.NewRequestWithContext(ctx, "POST", whisperAPIURL, body)
     if err != nil {
-	return "", fmt.Errorf("创建请求失败: %v", err)
+	return nil, fmt.Errorf("创建请求失败: %v", err)
     }
 
     req.Header.Set("Authorization", "Bearer "+wc.apiKey)
@@ -89,40 +98,40 @@ func (wc *WhisperClient) Transcribe(ctx context.Context, audioPath string, langu
     // 4. 发送请求
     resp, err := wc.httpClient.Do(req)
     if err != nil {
-	return "", fmt.Errorf("请求失败: %v", err)
+	return nil, fmt.Errorf("请求失败: %v", err)
     }
     defer resp.Body.Close()
 
     // 5. 检查响应状态
     if resp.StatusCode != http.StatusOK {
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	return "", fmt.Errorf("API 返回错误 (状态码 %d): %s", resp.StatusCode, string(bodyBytes))
+	return nil, fmt.Errorf("API 返回错误 (状态码 %d): %s", resp.StatusCode, string(bodyBytes))
     }
 
     // 6. 解析响应
     var whisperResp WhisperResponse
     if err := json.NewDecoder(resp.Body).Decode(&whisperResp); err != nil {
-	return "", fmt.Errorf("解析响应失败: %v", err)
+	return nil, fmt.Errorf("解析响应失败: %v", err)
     }
 
-    return whisperResp.Text, nil
+    return &whisperResp, nil
 }
 
 // TranscribeWithRetry 带重试的转换（面试亮点：错误处理）
-func (wc *WhisperClient) TranscribeWithRetry(ctx context.Context, audioPath string, language string, maxRetries int) (string, error) {
+func (wc *WhisperClient) TranscribeWithRetry(ctx context.Context, audioPath string, language string, maxRetries int) (*WhisperResponse, error) {
     var lastErr error
 
     for i := 0; i < maxRetries; i++ {
-	text, err := wc.Transcribe(ctx, audioPath, language)
+	resp, err := wc.Transcribe(ctx, audioPath, language)
 	if err == nil {
-	    return text, nil
+	    return resp, nil
 	}
 
 	lastErr = err
 
 	// 检查是否因为 Context 取消
 	if ctx.Err() != nil {
-	    return "", fmt.Errorf("任务被取消: %v", ctx.Err())
+	    return nil, fmt.Errorf("任务被取消: %v", ctx.Err())
 	}
 
 	// 指数退避
@@ -132,10 +141,10 @@ func (wc *WhisperClient) TranscribeWithRetry(ctx context.Context, audioPath stri
 	    case <-time.After(waitTime):
 		continue
 	    case <-ctx.Done():
-		return "", fmt.Errorf("任务被取消: %v", ctx.Err())
+		return nil, fmt.Errorf("任务被取消: %v", ctx.Err())
 	    }
 	}
     }
 
-    return "", fmt.Errorf("重试 %d 次后仍然失败: %v", maxRetries, lastErr)
+    return nil, fmt.Errorf("重试 %d 次后仍然失败: %v", maxRetries, lastErr)
 }

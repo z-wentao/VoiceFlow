@@ -70,6 +70,19 @@ func (js *JobStore) List() ([]*models.TranscriptionJob, error) {
     return jobs, nil
 }
 
+func (js *JobStore) ListAll() ([]*models.TranscriptionJob, error) {
+    js.mu.RLock()
+    defer js.mu.RUnlock()
+
+    jobs := make([]*models.TranscriptionJob, 0, len(js.jobs))
+    for _, job := range js.jobs {
+	jobs = append(jobs, job)
+    }
+
+    return jobs, nil
+}
+
+
 // Delete 删除任务
 func (js *JobStore) Delete(jobID string) error {
     js.mu.Lock()

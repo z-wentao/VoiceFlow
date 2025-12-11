@@ -133,6 +133,10 @@ func (rs *RedisJobStore) List() ([]*models.TranscriptionJob, error) {
     return jobs, nil
 }
 
+func (rs *RedisJobStore) ListAll() ([]*models.TranscriptionJob, error) {
+    return rs.List()
+}
+
 func (rs *RedisJobStore) Delete(jobID string) error {
     key := rs.getKey(jobID)
     indexKey := "voiceflow:jobs:index"

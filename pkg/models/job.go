@@ -18,19 +18,23 @@ type WordDetail struct {
 }
 
 type TranscriptionJob struct {
-    JobID       string       `json:"job_id"`        
-    Filename    string       `json:"filename"`      
-    FilePath    string       `json:"file_path"`     
-    Status      JobStatus    `json:"status"`        
-    Progress    int          `json:"progress"`      
-    Result      string       `json:"result"`        
-    Language    string       `json:"language"`      
-    Duration    float64      `json:"duration"`      
-    Error       string       `json:"error"`         
-    Vocabulary  []string     `json:"vocabulary"`    
-    VocabDetail []WordDetail `json:"vocab_detail"`  
-    CreatedAt   time.Time    `json:"created_at"`    
-    CompletedAt time.Time    `json:"completed_at"`  
+    JobID            string       `json:"job_id"`
+    Filename         string       `json:"filename"`
+    FilePath         string       `json:"file_path"`
+    Status           JobStatus    `json:"status"`
+    Progress         int          `json:"progress"`
+    Result           string       `json:"result"`
+    SubtitlePath     string       `json:"subtitle_path"`          // SRT 字幕文件路径（单语）
+    VTTPath          string       `json:"vtt_path"`               // WebVTT 字幕文件路径（单语）
+    BilingualSRTPath string       `json:"bilingual_srt_path"`     // 双语 SRT 字幕文件路径
+    BilingualVTTPath string       `json:"bilingual_vtt_path"`     // 双语 WebVTT 字幕文件路径
+    Language         string       `json:"language"`
+    Duration         float64      `json:"duration"`
+    Error            string       `json:"error"`
+    Vocabulary       []string     `json:"vocabulary"`
+    VocabDetail      []WordDetail `json:"vocab_detail"`
+    CreatedAt        time.Time    `json:"created_at"`
+    CompletedAt      time.Time    `json:"completed_at"`
 
     // RabbitMQ 相关（不序列化到 JSON）
     DeliveryTag      uint64      `json:"-"` // RabbitMQ delivery tag

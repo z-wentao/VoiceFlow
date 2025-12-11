@@ -110,6 +110,16 @@ func (s *HybridJobStore) List() ([]*models.TranscriptionJob, error) {
     return jobs, nil
 }
 
+func (s *HybridJobStore) ListAll() ([]*models.TranscriptionJob, error) {
+    jobs, err := s.db.List()
+    if err != nil {
+	log.Printf("DB 查询失败", err)
+	return nil, err
+    }
+
+    return jobs, nil
+}
+
 // Delete 删除任务
 // 策略：同时删除 Redis 和数据库中的数据
 func (s *HybridJobStore) Delete(jobID string) error {

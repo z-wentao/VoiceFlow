@@ -2,12 +2,14 @@ package main
 
 import (
     "context"
+    "encoding/json"
     "fmt"
     "log"
     "net/http"
     "os"
     "os/signal"
     "path/filepath"
+    "sort"
     "strings"
     "syscall"
     "time"
@@ -19,6 +21,7 @@ import (
     "github.com/z-wentao/voiceflow/pkg/models"
     "github.com/z-wentao/voiceflow/pkg/queue"
     "github.com/z-wentao/voiceflow/pkg/storage"
+    "github.com/z-wentao/voiceflow/pkg/templates"
     "github.com/z-wentao/voiceflow/pkg/transcriber"
     "github.com/z-wentao/voiceflow/pkg/vocabulary"
     "github.com/z-wentao/voiceflow/pkg/worker"
@@ -28,7 +31,7 @@ import (
 type App struct {
     config         *config.Config
     queue          queue.Queue
-    store          storage.Store 
+    store          storage.Store
     workers        []*worker.Worker
     engine         *transcriber.TranscriptionEngine
     extractor      *vocabulary.Extractor
@@ -231,29 +234,6 @@ func main() {
     log.Println("✅ VoiceFlow 服务器已完全关闭")
 }
 
-// setupRouter 设置路由
-func (app *App) setupRouter() *gin.Engine {
-    r := gin.Default()
-
-    // 静态文件
-    r.StaticFile("/", "./web/index.html")
-    r.Static("/uploads", "./uploads")
-
-    // API 路由
-    api := r.Group("/api")
-    {
-	api.GET("/ping", app.handlePing)
-	api.POST("/upload", app.handleUpload)
-	api.GET("/jobs/:job_id", app.handleGetJob)                                // 获取任务状态
-	api.GET("/jobs", app.handleListJobs)                                       // 列出所有任务
-	api.DELETE("/jobs/:job_id", app.handleDeleteJob)                           // 删除任务
-	api.POST("/jobs/:job_id/extract-vocabulary", app.handleExtractVocabulary) // 提取单词
-	api.POST("/jobs/:job_id/sync-to-maimemo", app.handleSyncToMaimemo)        // 同步到墨墨
-	api.POST("/maimemo/list-notepads", app.handleListNotepads)                // 查询云词本列表
-    }
-
-    return r
-}
 
 // Whisper API 支持的格式：mp3, mp4, mpeg, mpga, m4a, wav, webm, flac, aac
 func isValidAudioFormat(ext string) bool {
@@ -274,33 +254,73 @@ func isValidAudioFormat(ext string) bool {
     return validFormats[ext]
 }
 
+// setupRouter 设置路由
+func (app *App) setupRouter() *gin.Engine {
+    r := gin.Default()
+
+    // 静态文件
+    r.StaticFile("/", "./web/index.html")
+    r.Static("/uploads", "./uploads")
+
+    // API 路由
+    api := r.Group("/api")
+    {
+	api.GET("/ping", app.handlePing)
+
+	// HTMX 路由（返回 HTML 片段）
+	api.POST("/upload", app.handleUpload)
+	api.GET("/jobs", app.handleListJobs)
+	api.GET("/jobs/history", app.handleListJobsHistory)
+	api.GET("/jobs/count", app.handleJobsCount)
+	api.GET("/jobs/:job_id", app.handleGetJob)
+	api.GET("/jobs/:job_id/details", app.handleJobDetails)
+	api.GET("/jobs/:job_id/download", app.handleDownloadResult)
+	api.GET("/jobs/:job_id/download-subtitle", app.handleDownloadSubtitle)
+	api.GET("/jobs/:job_id/subtitle.vtt", app.handleSubtitleVTT)
+	api.DELETE("/jobs/:job_id", app.handleDeleteJob)
+	api.POST("/jobs/:job_id/extract-vocabulary", app.handleExtractVocabulary)
+	api.POST("/jobs/:job_id/sync-to-maimemo", app.handleSyncToMaimemo)
+	api.POST("/maimemo/list-notepads", app.handleListNotepads)
+    }
+
+    return r
+}
+
 func (app *App) handlePing(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{
 	"message": "pong",
-	"version": "0.2.0",
+	"version": "0.3.0-htmx",
     })
 }
 
-// handleUpload 处理文件上传
+// handleUpload 处理文件上传（返回 HTML）
 func (app *App) handleUpload(c *gin.Context) {
     file, err := c.FormFile("audio")
     if err != nil {
-	c.JSON(400, gin.H{"error": "请上传文件"})
+	c.Data(http.StatusBadRequest, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 请上传文件
+	    </div>
+	    `))
 	return
     }
 
     ext := filepath.Ext(file.Filename)
     if !isValidAudioFormat(ext) {
-	c.JSON(400, gin.H{
-	    "error": fmt.Sprintf("不支持的文件格式 %s，支持: .mp3, .wav, .m4a, .mp4, .flac, .aac", ext),
-	})
+	c.Data(http.StatusBadRequest, "text/html", []byte(fmt.Sprintf(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 不支持的文件格式 %s
+	    </div>
+	    `, ext)))
 	return
     }
 
     if file.Size > app.config.Server.MaxUploadSize {
-	c.JSON(400, gin.H{
-	    "error": fmt.Sprintf("文件太大，最大 %.0f MB", float64(app.config.Server.MaxUploadSize)/1024/1024),
-	})
+	c.Data(http.StatusBadRequest, "text/html", []byte(fmt.Sprintf(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 文件太大，最大 %.0f MB
+	    </div>
+	    `, float64(app.config.Server.MaxUploadSize)/1024/1024)))
 	return
     }
 
@@ -309,7 +329,11 @@ func (app *App) handleUpload(c *gin.Context) {
     savePath := filepath.Join("uploads", filename)
 
     if err := c.SaveUploadedFile(file, savePath); err != nil {
-	c.JSON(500, gin.H{"error": "保存文件失败"})
+	c.Data(http.StatusInternalServerError, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 保存文件失败
+	    </div>
+	    `))
 	return
     }
 
@@ -325,204 +349,399 @@ func (app *App) handleUpload(c *gin.Context) {
     }
 
     if err := app.store.Save(job); err != nil {
-	c.JSON(500, gin.H{"error": "保存任务失败"})
+	c.Data(http.StatusInternalServerError, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 保存任务失败
+	    </div>
+	    `))
 	return
     }
 
     if err := app.queue.Enqueue(job); err != nil {
-	c.JSON(500, gin.H{"error": "任务加入队列失败"})
+	c.Data(http.StatusInternalServerError, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 任务加入队列失败
+	    </div>
+	    `))
 	return
     }
 
     log.Printf("✓ 任务已加入队列: %s", jobID)
 
-    c.JSON(200, gin.H{
-	"job_id":   jobID,
-	"filename": file.Filename,
-	"size":     file.Size,
-	"status":   job.Status,
-	"message":  "上传成功，正在处理中...",
-    })
+    // 返回任务卡片 HTML
+    html := templates.RenderTaskCard(job)
+    c.Data(http.StatusOK, "text/html", []byte(html))
 }
 
-// handleGetJob 获取任务状态
+// handleListJobs 列出所有任务（返回 HTML）
+func (app *App) handleListJobs(c *gin.Context) {
+    jobs, err := app.store.List()
+    if err != nil {
+	c.Data(http.StatusInternalServerError, "text/html", []byte(`
+	    <div class="text-center py-16 text-red-400">
+	    <p class="text-5xl mb-3">❌</p>
+	    <p class="text-lg">获取任务列表失败</p>
+	    </div>
+	    `))
+	return
+    }
+
+    // 按创建时间倒序排序
+    sort.Slice(jobs, func(i, j int) bool {
+	return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+    })
+
+    html := templates.RenderTasksList(jobs)
+    c.Data(http.StatusOK, "text/html", []byte(html))
+}
+
+func (app *App) handleListJobsHistory(c *gin.Context) {
+    jobs, err := app.store.ListAll()
+    if err != nil {
+	c.Data(http.StatusInternalServerError, "text/html", []byte(`
+	    <div class="text-center py-16 text-red-400">
+	    <p class="text-5xl mb-3">❌</p>
+	    <p class="text-lg">获取任务历史失败</p>
+	    </div>
+	    `))
+	return
+    }
+    // 按创建时间倒序排序
+    sort.Slice(jobs, func(i, j int) bool {
+	return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+    })
+
+    html := templates.RenderTasksList(jobs)
+    c.Data(http.StatusOK, "text/html", []byte(html))
+
+}
+
+// handleJobsCount 返回任务计数（返回 HTML）
+func (app *App) handleJobsCount(c *gin.Context) {
+    jobs, err := app.store.List()
+    if err != nil {
+	c.Data(http.StatusOK, "text/html", []byte("0 个任务"))
+	return
+    }
+
+    html := fmt.Sprintf("%d 个任务", len(jobs))
+    c.Data(http.StatusOK, "text/html", []byte(html))
+}
+
+// handleGetJob 获取任务状态（返回 HTML）
 func (app *App) handleGetJob(c *gin.Context) {
     jobID := c.Param("job_id")
 
     job, err := app.store.Get(jobID)
     if err != nil {
-	c.JSON(404, gin.H{"error": "任务不存在"})
+	c.Data(http.StatusNotFound, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 任务不存在
+	    </div>
+	    `))
 	return
     }
 
-    c.JSON(200, job)
+    html := templates.RenderTaskCard(job)
+    c.Data(http.StatusOK, "text/html", []byte(html))
 }
 
-// handleListJobs 列出所有任务
-func (app *App) handleListJobs(c *gin.Context) {
-    jobs, err := app.store.List()
+// handleJobDetails 获取任务详情（返回 HTML）
+func (app *App) handleJobDetails(c *gin.Context) {
+    jobID := c.Param("job_id")
+
+    job, err := app.store.Get(jobID)
     if err != nil {
-	c.JSON(500, gin.H{"error": "获取任务列表失败"})
+	c.Data(http.StatusNotFound, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 任务不存在
+	    </div>
+	    `))
 	return
     }
-    c.JSON(200, gin.H{
-	"jobs":  jobs,
-	"total": len(jobs),
-    })
+
+    html := templates.RenderTaskDetails(job)
+    c.Data(http.StatusOK, "text/html", []byte(html))
 }
 
-// handleDeleteJob 删除任务
+// handleDownloadResult 下载转录结果
+func (app *App) handleDownloadResult(c *gin.Context) {
+    jobID := c.Param("job_id")
+
+    job, err := app.store.Get(jobID)
+    if err != nil {
+	c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
+	return
+    }
+
+    if job.Status != models.StatusCompleted || job.Result == "" {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "任务尚未完成或无结果"})
+	return
+    }
+
+    // 设置下载响应头
+    c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s_转录.txt", job.Filename))
+    c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(job.Result))
+}
+
+// handleDownloadSubtitle 下载 SRT 字幕文件
+func (app *App) handleDownloadSubtitle(c *gin.Context) {
+    jobID := c.Param("job_id")
+
+    job, err := app.store.Get(jobID)
+    if err != nil {
+	c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
+	return
+    }
+
+    if job.Status != models.StatusCompleted || job.SubtitlePath == "" {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "任务尚未完成或无字幕文件"})
+	return
+    }
+
+    // 读取 SRT 文件内容
+    srtContent, err := os.ReadFile(job.SubtitlePath)
+    if err != nil {
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "读取字幕文件失败"})
+	return
+    }
+
+    // 安全的文件名（移除特殊字符）
+    safeFilename := strings.TrimSuffix(job.Filename, filepath.Ext(job.Filename))
+    safeFilename = strings.ReplaceAll(safeFilename, `"`, "")
+
+    // 设置下载响应头（修复 Safari 兼容性）
+    c.Header("Content-Type", "text/plain; charset=utf-8")
+    c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.srt"`, safeFilename))
+    c.Header("Content-Length", fmt.Sprintf("%d", len(srtContent)))
+    c.Data(http.StatusOK, "text/plain; charset=utf-8", srtContent)
+}
+
+// handleSubtitleVTT 返回 WebVTT 字幕文件（用于视频播放器）
+func (app *App) handleSubtitleVTT(c *gin.Context) {
+    jobID := c.Param("job_id")
+
+    job, err := app.store.Get(jobID)
+    if err != nil {
+	c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
+	return
+    }
+
+    if job.Status != models.StatusCompleted || job.VTTPath == "" {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "任务尚未完成或无字幕文件"})
+	return
+    }
+
+    // 读取 VTT 文件内容
+    vttContent, err := os.ReadFile(job.VTTPath)
+    if err != nil {
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "读取字幕文件失败"})
+	return
+    }
+
+    // 设置 CORS 和响应头（允许视频播放器访问）
+    c.Header("Access-Control-Allow-Origin", "*")
+    c.Header("Content-Type", "text/vtt; charset=utf-8")
+    c.Header("Cache-Control", "public, max-age=3600")
+    c.Data(http.StatusOK, "text/vtt; charset=utf-8", vttContent)
+}
+
+// handleDeleteJob 删除任务（返回空内容，让 htmx 删除元素）
 func (app *App) handleDeleteJob(c *gin.Context) {
     jobID := c.Param("job_id")
 
     if err := app.store.Delete(jobID); err != nil {
 	log.Printf("❌ 删除任务失败: %v", err)
-	c.JSON(404, gin.H{"error": "任务不存在或删除失败"})
+	c.Data(http.StatusNotFound, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 删除失败
+	    </div>
+	    `))
 	return
     }
 
     log.Printf("✓ 任务已删除: %s", jobID)
 
-    c.JSON(200, gin.H{
-	"message": "删除成功",
-	"job_id":  jobID,
-    })
+    // 返回空内容，htmx 会删除目标元素
+    c.Data(http.StatusOK, "text/html", []byte(""))
 }
 
-// handleExtractVocabulary 提取单词
+// handleExtractVocabulary 提取单词（返回 HTML）
 func (app *App) handleExtractVocabulary(c *gin.Context) {
     jobID := c.Param("job_id")
 
-    // 1. 获取任务
     job, err := app.store.Get(jobID)
     if err != nil {
-	c.JSON(404, gin.H{"error": "任务不存在"})
+	c.Data(http.StatusNotFound, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 任务不存在
+	    </div>
+	    `))
 	return
     }
 
-    // 2. 检查任务是否已完成
     if job.Status != models.StatusCompleted {
-	c.JSON(400, gin.H{"error": "任务尚未完成，无法提取单词"})
+	c.Data(http.StatusBadRequest, "text/html", []byte(`
+	    <div class="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
+	    ⚠️ 任务尚未完成，无法提取单词
+	    </div>
+	    `))
 	return
     }
 
-    // 3. 检查是否有转换结果
     if job.Result == "" {
-	c.JSON(400, gin.H{"error": "转换结果为空"})
+	c.Data(http.StatusBadRequest, "text/html", []byte(`
+	    <div class="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
+	    ⚠️ 转换结果为空
+	    </div>
+	    `))
 	return
     }
 
-    // 4. 使用 AI 提取单词
     log.Printf("开始提取单词，任务 ID: %s", jobID)
-    result, err := app.extractor.Extract(c.Request.Context(), job.Result)
-    if err != nil {
-	log.Printf("❌ 提取单词失败: %v", err)
-	c.JSON(500, gin.H{"error": fmt.Sprintf("提取单词失败: %v", err)})
-	return
-    }
 
-    // 5. 保存到任务
-    job.Vocabulary = result.Words
-    job.VocabDetail = make([]models.WordDetail, len(result.Details))
-    for i, detail := range result.Details {
-	job.VocabDetail[i] = models.WordDetail{
-	    Word:       detail.Word,
-	    Definition: detail.Definition,
-	    Example:    detail.Example,
+    // 显示加载状态
+    c.Data(http.StatusOK, "text/html", []byte(`
+	<div class="text-center p-8">
+	<span class="spinner"></span>
+	<p class="text-gray-600 mt-2">正在提取单词，请稍候...</p>
+	</div>
+	`))
+
+    // 异步提取单词
+    go func() {
+	result, err := app.extractor.Extract(c.Request.Context(), job.Result)
+	if err != nil {
+	    log.Printf("❌ 提取单词失败: %v", err)
+	    return
 	}
-    }
 
-    if err := app.store.Save(job); err != nil {
-	c.JSON(500, gin.H{"error": "保存单词列表失败"})
-	return
-    }
+	job.Vocabulary = result.Words
+	job.VocabDetail = make([]models.WordDetail, len(result.Details))
+	for i, detail := range result.Details {
+	    job.VocabDetail[i] = models.WordDetail{
+		Word:       detail.Word,
+		Definition: detail.Definition,
+		Example:    detail.Example,
+	    }
+	}
 
-    log.Printf("✓ 成功提取 %d 个单词", len(result.Words))
+	if err := app.store.Save(job); err != nil {
+	    log.Printf("❌ 保存单词列表失败: %v", err)
+	    return
+	}
 
-    // 6. 返回结果
-    c.JSON(200, gin.H{
-	"job_id":      jobID,
-	"vocabulary":  job.Vocabulary,
-	"vocab_detail": job.VocabDetail,
-	"count":       len(job.Vocabulary),
-    })
+	log.Printf("✓ 成功提取 %d 个单词", len(result.Words))
+    }()
 }
 
-// SyncToMaimemoRequest 同步到墨墨的请求
-type SyncToMaimemoRequest struct {
-    Token     string `json:"token" binding:"required"`      // 墨墨 API Token
-    NotepadID string `json:"notepad_id" binding:"required"` // 云词本 ID
-}
-
-// handleSyncToMaimemo 同步到墨墨背单词（通过 Maimemo 微服务）
+// handleSyncToMaimemo 同步到墨墨（返回 HTML）
 func (app *App) handleSyncToMaimemo(c *gin.Context) {
     jobID := c.Param("job_id")
+    token := c.PostForm("token")
+    notepadID := c.PostForm("notepad_id")
 
-    // 1. 解析请求
-    var req SyncToMaimemoRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-	c.JSON(400, gin.H{"error": "请求参数错误: " + err.Error()})
+    if token == "" || notepadID == "" {
+	c.Data(http.StatusBadRequest, "text/html", []byte(`
+	    <div class="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
+	    ⚠️ 请输入 Token 和云词本 ID
+	    </div>
+	    `))
 	return
     }
 
-    // 2. 获取任务
     job, err := app.store.Get(jobID)
     if err != nil {
-	c.JSON(404, gin.H{"error": "任务不存在"})
+	c.Data(http.StatusNotFound, "text/html", []byte(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 任务不存在
+	    </div>
+	    `))
 	return
     }
 
-    // 3. 检查是否已提取单词
     if len(job.Vocabulary) == 0 {
-	c.JSON(400, gin.H{"error": "尚未提取单词，请先调用提取单词接口"})
+	c.Data(http.StatusBadRequest, "text/html", []byte(`
+	    <div class="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
+	    ⚠️ 尚未提取单词，请先提取单词
+	    </div>
+	    `))
 	return
     }
 
-    // 4. 调用 Maimemo 微服务添加单词
     log.Printf("开始同步到墨墨，任务 ID: %s, 单词数: %d", jobID, len(job.Vocabulary))
-    if err := app.maimemoService.AddWordsToNotepad(c.Request.Context(), req.Token, req.NotepadID, job.Vocabulary); err != nil {
+
+    if err := app.maimemoService.AddWordsToNotepad(c.Request.Context(), token, notepadID, job.Vocabulary); err != nil {
 	log.Printf("❌ 同步到墨墨失败: %v", err)
-	c.JSON(500, gin.H{"error": fmt.Sprintf("同步到墨墨失败: %v", err)})
+	c.Data(http.StatusInternalServerError, "text/html", []byte(fmt.Sprintf(`
+	    <div class="bg-red-50 text-red-800 p-3 rounded-lg text-sm">
+	    ❌ 同步失败: %v
+	    </div>
+	    `, err)))
 	return
     }
 
     log.Printf("✓ 成功同步 %d 个单词到墨墨", len(job.Vocabulary))
 
-    // 5. 返回结果
-    c.JSON(200, gin.H{
-	"message": "同步成功",
-	"count":   len(job.Vocabulary),
-    })
+    c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf(`
+	<div class="bg-green-50 text-green-800 p-3 rounded-lg text-sm">
+	✅ 成功同步 %d 个单词到墨墨背单词！
+	</div>
+	`, len(job.Vocabulary))))
 }
 
-// ListNotepadsRequest 查询云词本列表的请求
-type ListNotepadsRequest struct {
-    Token string `json:"token" binding:"required"` // 墨墨 API Token
-}
-
-// handleListNotepads 查询用户的云词本列表（通过 Maimemo 微服务）
+// handleListNotepads 查询云词本列表（返回 HTML）
 func (app *App) handleListNotepads(c *gin.Context) {
-    // 1. 解析请求
-    var req ListNotepadsRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-	c.JSON(400, gin.H{"error": "请求参数错误: " + err.Error()})
+    // 从表单中获取 token（htmx 会自动将 input 值转为 POST 数据）
+    token := c.PostForm("token")
+
+    if token == "" {
+	c.Data(http.StatusBadRequest, "text/html", []byte(`
+	    <div class="p-4 text-center text-yellow-800">
+	    ⚠️ 请先输入墨墨 API Token
+	    </div>
+	    `))
 	return
     }
 
-    // 2. 调用 Maimemo 微服务获取云词本列表
     log.Printf("正在查询云词本列表...")
-    notepads, err := app.maimemoService.ListNotepads(c.Request.Context(), req.Token)
+
+    notepads, err := app.maimemoService.ListNotepads(c.Request.Context(), token)
     if err != nil {
 	log.Printf("❌ 查询云词本列表失败: %v", err)
-	c.JSON(500, gin.H{"error": fmt.Sprintf("查询失败: %v", err)})
+	c.Data(http.StatusInternalServerError, "text/html", []byte(fmt.Sprintf(`
+	    <div class="p-4 text-center text-red-800">
+	    ❌ 查询失败: %v
+	    </div>
+	    `, err)))
 	return
     }
 
     log.Printf("✓ 成功查询到 %d 个云词本", len(notepads))
 
-    // 3. 返回结果
-    c.JSON(200, gin.H{
-	"notepads": notepads,
-	"count":    len(notepads),
-    })
+    // 将 notepads 转换为 map 列表
+    notepadMaps := make([]map[string]interface{}, len(notepads))
+    for i, notepad := range notepads {
+	// 将 notepad 转为 map
+	data, _ := json.Marshal(notepad)
+	var m map[string]interface{}
+	json.Unmarshal(data, &m)
+	notepadMaps[i] = m
+    }
+
+    // 从 URL 查询参数或表单中获取 jobID（htmx 可以通过 hx-vals 传递）
+    jobID := c.Query("job_id")
+    if jobID == "" {
+	// 尝试从表单中获取
+	jobID = c.PostForm("job_id")
+    }
+    // 如果还是为空，尝试从 Referer 中提取
+    if jobID == "" {
+	// 假设页面 URL 包含 job_id 信息，或者我们从某个隐藏字段获取
+	// 这里我们需要从前端传递，暂时使用一个占位符
+	jobID = "unknown"
+    }
+
+    html := templates.RenderNotepads(notepadMaps, jobID)
+    c.Data(http.StatusOK, "text/html", []byte(html))
 }
