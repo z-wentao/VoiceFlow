@@ -610,7 +610,11 @@ func (app *App) handleExtractVocabulary(c *gin.Context) {
 
     // 异步提取单词
     go func() {
-	result, err := app.extractor.Extract(c.Request.Context(), job.Result)
+	// 使用独立的 context，避免 HTTP 请求结束后 context 被取消
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	result, err := app.extractor.Extract(ctx, job.Result)
 	if err != nil {
 	    log.Printf("❌ 提取单词失败: %v", err)
 	    return

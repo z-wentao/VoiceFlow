@@ -101,6 +101,16 @@
 
         function showMaimemoForm(jobId) {
             document.getElementById('maimemo-form-' + jobId).hidden = false;
+
+            // 自动填充保存的值
+            const savedToken = localStorage.getItem('maimemo_token') || '';
+            const savedNotepadId = localStorage.getItem('maimemo_notepad_id') || '';
+
+            const tokenInput = document.getElementById('token-' + jobId);
+            const notepadInput = document.getElementById('notepad-' + jobId);
+
+            if (tokenInput && tokenInput.value === '') tokenInput.value = savedToken;
+            if (notepadInput && notepadInput.value === '') notepadInput.value = savedNotepadId;
         }
 
         function hideMaimemoForm(jobId) {
@@ -110,6 +120,8 @@
         function selectNotepad(jobId, notepadId) {
             document.getElementById('notepad-' + jobId).value = notepadId;
             document.getElementById('notepad-list-' + jobId).hidden = true;
+            // 保存选择的云词本 ID
+            saveNotepadId(notepadId);
         }
 
         function saveToken(token) {
